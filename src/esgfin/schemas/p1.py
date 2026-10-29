@@ -16,7 +16,6 @@ from esgfin.constants import (
     LEVELS,
     METHODS,
     SUBCATEGORY_SOURCES,
-    TIME_HORIZONS,
 )
 
 from .base import ZhModel, zh
@@ -40,7 +39,8 @@ class P1ItemDraft(ZhModel):
     subcategory: Literal[ALL_SUBCATEGORIES] = zh("子類別")
     subcategory_source: Literal[SUBCATEGORY_SOURCES] = zh("子類別來源")
     event_description: str = zh("事件描述")
-    time_horizon: Literal[TIME_HORIZONS] | None = zh("影響時間")
+    # 不限定內容（SPEC 7.3 v2）：提示引導以短／中／長及其組合填寫，例如「中至長」；檢查模組不驗證
+    time_horizon: str | None = zh("影響時間")
     time_horizon_raw: str | None = zh("影響時間原文用語")
     likelihood: Literal[LEVELS] | None = zh("發生可能性")
     likelihood_raw: str | None = zh("發生可能性原文用語")

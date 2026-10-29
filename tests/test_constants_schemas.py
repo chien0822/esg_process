@@ -92,3 +92,17 @@ def test_settings_reject_minimal_thinking_and_context_card():
         Settings.model_validate({"llm": {"model": "m", "thinking_level": "minimal"}})
     with pytest.raises(ValidationError):
         Settings.model_validate({**base, "context_card": {"enabled": True}})
+
+
+def test_time_horizon_is_free_text():
+    """SPEC 7.3 v2：影響時間不限定內容，可填跨期組合或 null。"""
+    from esgfin.schemas.p1 import P1ItemDraft
+
+    from fakes import EXTRACTION
+
+    base = EXTRACTION["items"][0]
+    for value in ("中至長", "短至長", "長", None):
+        item = P1ItemDraft.model_validate({**base, "影響時間": value})
+        assert item.time_horizon == value
+    schema = P1ItemDraft.model_json_schema(by_alias=True)["properties"]["影響時間"]
+    assert "enum" not in str(schema)

@@ -77,7 +77,7 @@ SUBCATEGORIES: dict[str, tuple[str, ...]] = {
 ALL_SUBCATEGORIES: tuple[str, ...] = tuple(dict.fromkeys(s for v in SUBCATEGORIES.values() for s in v))
 
 SUBCATEGORY_SOURCES: tuple[str, ...] = ("原文", "AI歸類")
-TIME_HORIZONS: tuple[str, ...] = ("短", "中", "長")
+TIME_HORIZONS: tuple[str, ...] = ("短", "中", "長")  # 影響時間的提示用詞；欄位本身不限定（SPEC 7.3 v2）
 LEVELS: tuple[str, ...] = ("低", "中", "高")
 IMPACT_SCOPES: tuple[str, ...] = ("全公司", "特定單位或據點", "子公司", "供應商", "上下游")
 
