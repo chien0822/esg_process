@@ -98,12 +98,13 @@ class StageRegistry:
 
     @classmethod
     def production(cls) -> "StageRegistry":
+        from esgfin.parse.stage import run_parse
         from esgfin.site.build import build_site
 
         return cls(
             fns={
                 "explore": run_explore,
-                "parse": _not_implemented("S1", "解析", "M1"),
+                "parse": run_parse,
                 "locate": _not_implemented("S2", "定位", "M2"),
                 "extract": _not_implemented("S3", "方法一擷取", "M3"),
                 "p1check": _not_implemented("S4", "完整度檢查", "M5"),
@@ -444,6 +445,7 @@ class Runner:
             self.console.print(f"  {spec.code} {spec.label}：執行中…")
             ctx.report_dir.mkdir(parents=True, exist_ok=True)
             srec.status = "completed"
+            ctx.stage_record = srec
             self.registry.fns[spec.key](ctx)
             if not stage_complete(ctx.report_dir, spec):
                 raise RuntimeError(f"{spec.code} 執行完畢但輸出檔不完整或未通過 schema 驗證")

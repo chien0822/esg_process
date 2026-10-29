@@ -4,12 +4,17 @@ version = "0.1.0"
 description = "ESG 氣候風險→會計科目分析系統（碩士論文研究用）"
 requires-python = ">=3.11"
 dependencies = [
+    "docling>=2.144.0",
     "google-genai>=2.33.0",
     "jinja2>=3.1.6",
     "pydantic>=2.14.1",
+    "pymupdf>=2.0",
+    "pymupdf4llm>=2.0",
     "python-dotenv>=1.2.4",
     "pyyaml>=6.0.3",
     "rich>=15.0.0",
+    "torch>=2.15.0",
+    "torchvision>=0.29.2",
 ]
 
 [build-system]
@@ -26,3 +31,13 @@ testpaths = ["tests"]
 dev = [
     "pytest>=9.1.1",
 ]
+
+# 無 GPU：torch 只從 PyTorch CPU 索引安裝（Docling 官方安裝說明、uv PyTorch 指南）
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[tool.uv.sources]
+torch = [{ index = "pytorch-cpu" }]
+torchvision = [{ index = "pytorch-cpu" }]

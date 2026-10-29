@@ -231,17 +231,31 @@ def test_api_error_marks_item_failed_and_continues(project, make_runner):
     assert rec.reports[REALTEK].stages["reason"].items_failed == 2
 
 
-def test_production_registry_stops_at_parse(project):
+def test_production_registry_parses_then_stops_at_locate(project):
     import io
 
+    import pymupdf
+    import yaml
     from rich.console import Console
 
     from esgfin.pipeline.runner import Runner
 
-    rec = Runner(project, console=Console(file=io.StringIO())).run(RunOptions()).record
+    # 真的 PDF＋真的 PyMuPDF4LLM（快）；不載入 Docling
+    settings_file = project / "config" / "settings.yaml"
+    settings = yaml.safe_load(settings_file.read_text(encoding="utf-8"))
+    settings["parse"] = {"parser": "pymupdf4llm"}
+    settings_file.write_text(yaml.safe_dump(settings, allow_unicode=True), encoding="utf-8")
+    for f in ("realtek_2024_ESG.pdf", "Quanta_2024_ESG.pdf"):
+        doc = pymupdf.open()
+        doc.new_page().insert_text((72, 72), "Climate-related risks and opportunities")
+        doc.save(project / "report" / f)
+
+    rec = Runner(project, console=Console(file=io.StringIO())).run(RunOptions(build_site=False)).record
     r = rec.reports[REALTEK]
-    assert r.status == "失敗" and "M1" in r.error
-    assert r.stages["explore"].status == "completed" and r.stages["parse"].status == "not_implemented"
+    assert r.status == "失敗" and "M2" in r.error
+    assert r.stages["parse"].status == "completed" and r.stages["parse"].parse_cache_hit is False
+    assert r.stages["locate"].status == "not_implemented"
+    assert (project / "runs" / rec.run_id / REALTEK / "01_pages.jsonl").exists()
 
 
 def test_site_shows_latest_success_and_newer_failure_note(project, make_runner):

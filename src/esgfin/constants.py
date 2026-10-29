@@ -122,7 +122,7 @@ EVIDENCE_GRADES_REQUIRING_QUOTE: tuple[str, ...] = ("A", "B")
 # 推理狀態（07_final.json）
 REASONING_OK = "成功"
 REASONING_FAILED = "推理失敗"
-# S6 標記為內部不一致（例如整體判斷無影響但表格非空）：不由程式猜哪個對，網頁顯示此字串
+# S4 或 S6 有「嚴重」問題（分級見 P1_CHECK_RULES、P2_CHECK_RULES）：不由程式猜哪個對，網頁顯示此字串
 REASONING_CHECK_FAILED = "檢查未通過"
 REASONING_STATUSES: tuple[str, ...] = (REASONING_OK, REASONING_FAILED, REASONING_CHECK_FAILED)
 
@@ -147,6 +147,62 @@ CITATION_EXACT = "完全通過"
 CITATION_FUZZY = "模糊通過"
 CITATION_FAIL = "未通過"
 CITATION_LEVELS: tuple[str, ...] = (CITATION_EXACT, CITATION_FUZZY, CITATION_FAIL)
+
+# ---------------------------------------------------------------------------
+# 檢查規則與分級（SPEC 17.8）
+# 嚴重：S7 將條目的推理狀態設為「檢查未通過」，網頁不顯示科目
+# 輕微：只記錄並計入指標，網頁照常顯示
+# 要調整分級只改這裡；S4 檢查 P1，S6 只檢查 P2，不重複
+# ---------------------------------------------------------------------------
+
+SEVERITY_SEVERE = "嚴重"
+SEVERITY_MINOR = "輕微"
+SEVERITIES: tuple[str, ...] = (SEVERITY_SEVERE, SEVERITY_MINOR)
+
+RULE_SUBCATEGORY_MISMATCH = "子類別與類型不符"
+RULE_CITATION_FAIL = "引文未通過"
+RULE_CITATION_FUZZY = "引文模糊通過"
+
+RULE_JUDGEMENT_TABLE_MISMATCH = "整體判斷與表格矛盾"
+RULE_JUDGEMENT_REASON_MISMATCH = "整體判斷與無影響理由類型矛盾"
+RULE_ACCOUNT_NOT_IN_LIST = "科目不在清單"
+RULE_ACCOUNT_WRONG_STATEMENT = "科目放錯表"
+RULE_ACCOUNT_EXCLUDED = "選到排除項目"
+RULE_ACCOUNT_DUPLICATE = "同表科目重複"
+RULE_RANK_NOT_CONTINUOUS = "排序不連續"
+RULE_DIRECTION_NONE = "LLM列出的方向為不影響"
+RULE_QUOTE_MISSING_FOR_AB = "證據等級AB缺原文依據"
+RULE_INSUFFICIENT_WITHOUT_GAP = "理由類型為描述不足但缺口為空"
+RULE_ALTERNATIVE_EQUALS_MAIN = "替代科目等於主科目"
+RULE_EXPLANATION_EMPTY = "傳導說明空白"
+
+# S4：檢查 P1（03_p1_items.json）
+P1_CHECK_RULES: dict[str, str] = {
+    RULE_SUBCATEGORY_MISMATCH: SEVERITY_SEVERE,
+    RULE_CITATION_FAIL: SEVERITY_MINOR,  # 原文內容
+    RULE_CITATION_FUZZY: SEVERITY_MINOR,
+}
+
+# S6：檢查 P2（05_p2/）
+P2_CHECK_RULES: dict[str, str] = {
+    RULE_JUDGEMENT_TABLE_MISMATCH: SEVERITY_SEVERE,
+    RULE_JUDGEMENT_REASON_MISMATCH: SEVERITY_SEVERE,  # 【提案】使用者未分級
+    RULE_ACCOUNT_NOT_IN_LIST: SEVERITY_SEVERE,
+    RULE_ACCOUNT_WRONG_STATEMENT: SEVERITY_SEVERE,
+    RULE_ACCOUNT_EXCLUDED: SEVERITY_SEVERE,
+    RULE_ACCOUNT_DUPLICATE: SEVERITY_SEVERE,
+    RULE_RANK_NOT_CONTINUOUS: SEVERITY_SEVERE,
+    RULE_DIRECTION_NONE: SEVERITY_SEVERE,
+    RULE_CITATION_FAIL: SEVERITY_MINOR,  # 理解紀錄原文引用、原文依據
+    RULE_CITATION_FUZZY: SEVERITY_MINOR,
+    RULE_QUOTE_MISSING_FOR_AB: SEVERITY_MINOR,
+    RULE_INSUFFICIENT_WITHOUT_GAP: SEVERITY_MINOR,
+    RULE_ALTERNATIVE_EQUALS_MAIN: SEVERITY_MINOR,  # 【提案】使用者未分級
+    RULE_EXPLANATION_EMPTY: SEVERITY_MINOR,  # 【提案】使用者未分級
+}
+
+CHECK_RULES_BY_STAGE: dict[str, dict[str, str]] = {"S4": P1_CHECK_RULES, "S6": P2_CHECK_RULES}
+ALL_CHECK_RULES: tuple[str, ...] = tuple(dict.fromkeys([*P1_CHECK_RULES, *P2_CHECK_RULES]))
 
 # ---------------------------------------------------------------------------
 # 行業大類（中華民國統計資訊網行業統計分類，SPEC 4.1）

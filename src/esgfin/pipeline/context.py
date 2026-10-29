@@ -13,7 +13,7 @@ from esgfin.schemas.meta import ReportConfig
 from esgfin.schemas.settings import Settings
 
 from .paths import ProjectPaths
-from .record import PromptInfo
+from .record import PromptInfo, StageRecord
 
 
 @dataclass
@@ -26,6 +26,8 @@ class ReportContext:
     console: Console
     _llm_factory: Callable[[], LLMService]
     stage: str = ""
+    # 目前階段的紀錄；階段可寫入額外資訊（例如 S1 的 parse_cache_hit）
+    stage_record: StageRecord | None = field(default=None, repr=False)
     _llm: LLMService | None = field(default=None, repr=False)
 
     @property

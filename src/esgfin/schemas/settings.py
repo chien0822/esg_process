@@ -44,6 +44,8 @@ class PricingSettings(StrictModel):
 
 class ParseSettings(StrictModel):
     parser: ParserName = "docling"  # 【待確認 15-6】M1 比較後決定
+    # 有文字層的頁數比例低於此值即視為掃描檔，停止該份（ver1 不做 OCR）
+    min_text_page_ratio: float = Field(default=0.5, gt=0, le=1)
 
 
 class LocateSettings(StrictModel):

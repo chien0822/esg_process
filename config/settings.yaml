@@ -26,6 +26,7 @@ pricing:                        # 只用於估算花費；請依官方價目表�
 
 parse:
   parser: docling               # docling / pymupdf4llm【M1 比較後決定】
+  min_text_page_ratio: 0.5      # 有文字層的頁數比例低於此值視為掃描檔，停止該份
 
 locate:
   toc_scan_pages: 20            # 沒有書籤時掃描前幾頁找目錄
