@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>氣候風險與機會：潛在受影響會計科目</title>
+<style>
+  :root {
+    --primary: #2D6A4F;
+    --secondary: #74C69D;
+    --bg: #F9F8F6;
+    --text: #1B4332;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 24px 16px; background: var(--bg); color: var(--text);
+    font-family: "Noto Sans TC", "Microsoft JhengHei", "PingFang TC", sans-serif; line-height: 1.6;
+  }
+  main { max-width: 1400px; margin: 0 auto; }
+  section { border: 1px solid var(--secondary); border-radius: 8px; padding: 16px; margin-block: 24px; background: #fff; }
+  h2 { margin: 0 0 4px; }
+  .meta { margin: 0; }
+  .run { font-size: 0.8rem; opacity: 0.8; margin: 4px 0 12px; }
+  .note { font-size: 0.85rem; border-left: 4px solid var(--secondary); padding-left: 8px; }
+  .status { font-weight: bold; }
+  .table-wrap { overflow-x: auto; }
+  table { border-collapse: collapse; min-width: 1100px; width: 100%; font-size: 0.9rem; }
+  th { background: var(--primary); color: var(--bg); text-align: left; }
+  th, td { border: 1px solid var(--secondary); padding: 6px 8px; vertical-align: top; }
+  td.accounts { white-space: pre; }
+  footer { font-size: 0.85rem; text-align: center; margin-top: 32px; }
+</style>
+</head>
+<body>
+<main>
+<h1>氣候風險與機會：潛在受影響會計科目</h1>
+{% if not views %}<p>目前沒有任何結果。</p>{% endif %}
+{% for v in views %}
+<section>
+  <h2>{{ v.company_full_name }}</h2>
+  <p class="meta">報告書年度：{{ v.report_year or "—" }}　行業：{{ v.industry or "—" }}</p>
+  <p class="run">分析日期 {{ v.analyzed_at }}　run_id {{ v.run_id }}</p>
+  {% if v.note %}<p class="note">{{ v.note }}</p>{% endif %}
+  {% if v.final %}
+  <div class="table-wrap">
+  <table>
+    <thead><tr>
+      <th>代碼</th><th>方法</th><th>類型與子類別</th><th>事件描述</th><th>影響時間</th>
+      <th>發生可能性</th><th>衝擊強度</th><th>影響範圍</th><th>潛在受影響會計科目</th>
+    </tr></thead>
+    <tbody>
+    {% for it in v.final.items %}
+    <tr>
+      <td>{{ it.code }}</td><td>{{ it.method }}</td><td>{{ it.item_type }}／{{ it.subcategory }}</td>
+      <td>{{ it.event_description }}</td><td>{{ it.time_horizon or "—" }}</td>
+      <td>{{ it.likelihood or "—" }}</td><td>{{ it.severity or "—" }}</td><td>{{ it.scope or "—" }}</td>
+      <td class="accounts">{{ accounts_lines(it) | join("\n") }}</td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% else %}
+  <p class="status">處理未完成：{{ v.status }}</p>
+  {% if v.error %}<p>原因：{{ v.error }}</p>{% endif %}
+  {% endif %}
+</section>
+{% endfor %}
+<footer>本頁為研究系統輸出，不構成投資建議。</footer>
+</main>
+</body>
+</html>

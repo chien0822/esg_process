@@ -1,0 +1,20 @@
+# 機密
+.env
+
+# 執行產物（可由程式重新產生）
+/cache/
+/runs/
+/site/
+
+# 報告書原檔（版權與檔案大小）
+report/*.pdf
+
+# Python / uv
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+*.egg-info/
+/build/
+/dist/
+.ruff_cache/

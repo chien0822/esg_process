@@ -1,0 +1,22 @@
+# 報告書 metadata（SPEC 4.1）。行業由使用者填寫，不讓 LLM 判斷。
+# 公司全名與股票代號已由使用者核對（2026-10-27）。
+
+reports:
+  - file: realtek_2024_ESG.pdf
+    company_full_name: 瑞昱半導體股份有限公司
+    stock_code: "2379"
+    report_year: 2024
+    industry:
+      section_code: C
+      section_name: 製造業
+      version: 待確認          # 行業統計分類修訂版次
+      detail: null            # 選填：中類或小類
+  - file: Quanta_2024_ESG.pdf
+    company_full_name: 廣達電腦股份有限公司
+    stock_code: "2382"
+    report_year: 2024
+    industry:
+      section_code: C
+      section_name: 製造業
+      version: 待確認
+      detail: null

@@ -1,0 +1,47 @@
+# 系統設定（SPEC 4.2）。改動會影響結果的設定後，--resume 會拒絕接續舊 run。
+
+llm:
+  provider: gemini
+  model: gemini-3.8-flash
+  thinking_level: medium        # low / medium / high（不可用 minimal）
+  max_output_tokens: null       # null = 使用 API 預設（上限 65,536）
+  validation_retries: 2         # 回應未通過 pydantic 驗證時，附上錯誤重問的次數
+  timeout_s: 600
+  # 不設 temperature：google-genai SDK 已將 generation_config.temperature 標為 deprecated
+
+rate_limit:                     # 付費帳號，實際額度依 Google AI Studio 顯示為準
+  requests_per_minute: 60       # 保守值，可依帳號額度調高
+  tokens_per_minute: null       # null = 不限
+
+retry:                          # 429、5xx、連線錯誤的指數退避
+  max_attempts: 5
+  initial_backoff_s: 2
+  multiplier: 2
+  max_backoff_s: 60
+  jitter: true
+
+pricing:                        # 只用於估算花費；請依官方價目表填寫（美元／百萬 token）
+  input_usd_per_million_tokens: null
+  output_usd_per_million_tokens: null
+
+parse:
+  parser: docling               # docling / pymupdf4llm【M1 比較後決定】
+
+locate:
+  toc_scan_pages: 20            # 沒有書籤時掃描前幾頁找目錄
+  section_page_buffer: 1        # 章節範圍前後各加幾頁
+
+extract:
+  input_mode: text              # text / text+pdf
+
+check:
+  citation_page_buffer: 1       # 引文驗證比對頁的前後緩衝
+  fuzzy_pass_ratio: 0.9         # 模糊通過門檻【M5 再定】
+
+context_card:
+  enabled: false                # ver1 不實作
+
+site:
+  port: 8765                    # 只綁 127.0.0.1
+
+prompts: {}                     # 例：p2_reasoning: 1 → prompts/p2_reasoning_v1.md（M2 起加入）
