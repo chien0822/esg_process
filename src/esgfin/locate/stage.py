@@ -46,7 +46,8 @@ def _pdf_bytes(pdf: Path, pages: list[int]) -> bytes:
     with pymupdf.open(pdf) as src, pymupdf.open() as out:
         for n in pages:
             out.insert_pdf(src, from_page=n - 1, to_page=n - 1)
-        return out.tobytes()
+        # no_new_id：不寫入新的檔案 ID，同樣的頁每次產生相同位元組，LLM 快取才會命中
+        return out.tobytes(no_new_id=True)
 
 
 def _page_block(n: int, text: str, limit: int) -> str:

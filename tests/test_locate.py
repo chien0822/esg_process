@@ -216,3 +216,16 @@ def test_toc_continuation_page_without_keyword(tmp_path):
     pdf = tmp_path / "toc.pdf"
     doc.save(pdf)
     assert find_toc_pages(analyze(pdf, 0.12, 5), scan_pages=20, min_numbers=10) == [1, 2]
+
+
+def test_sub_pdf_bytes_are_deterministic(tmp_path):
+    """目錄頁 PDF 是 LLM 請求的一部分；位元組不穩定會讓快取永遠不命中。"""
+    import time
+
+    from esgfin.locate.stage import _pdf_bytes
+
+    pdf = tmp_path / "r.pdf"
+    write_report_pdf(pdf)
+    first = _pdf_bytes(pdf, [2])
+    time.sleep(1.1)
+    assert _pdf_bytes(pdf, [2]) == first
