@@ -138,6 +138,21 @@ STRATEGY_TABLE_FOUND_BY: tuple[str, ...] = ("keyword+llm", "index_fallback", "ov
 STRATEGY_TABLE_KEYWORDS: tuple[str, ...] = (
     "氣候", "風險", "機會", "財務影響", "轉型", "實體", "TCFD", "IFRS S2",
 )
+# 書末索引頁的辨識字串（第 7 步）
+INDEX_PAGE_KEYWORDS: tuple[str, ...] = ("GRI", "TCFD", "SASB", "IFRS S2", "氣候相關資訊")
+TOC_PAGE_KEYWORDS: tuple[str, ...] = ("目錄", "Contents", "CONTENTS")
+TOC_UNCERTAIN_FIELDS: tuple[str, ...] = ("標題", "層級", "印刷頁碼")
+
+# manifest 章節 flags（第 3、4、8 步）
+FLAG_NOT_INCREASING = "同層頁碼未遞增"
+FLAG_PARENT_AFTER_CHILD = "章起始頁大於第一個子項目頁"
+FLAG_OUT_OF_RANGE = "頁碼超出總頁數"
+FLAG_UNCERTAIN_PAGE = "目錄頁碼不確定"
+FLAG_CORRECTED_BY_CHILD = "起始頁已依第一個子項目校正"
+FLAG_CORRECTED_BY_NAV = "起始頁已依導覽列校正"
+FLAG_NO_PAGE = "無頁碼，無法計算範圍"
+FLAG_TITLE_NOT_FOUND = "標題未出現在起始頁或緩衝頁"
+FLAG_NAV_MISMATCH = "與導覽列標示的章節範圍不一致"
 
 # ---------------------------------------------------------------------------
 # 引文驗證（SPEC 10.2）
@@ -186,7 +201,7 @@ P1_CHECK_RULES: dict[str, str] = {
 # S6：檢查 P2（05_p2/）
 P2_CHECK_RULES: dict[str, str] = {
     RULE_JUDGEMENT_TABLE_MISMATCH: SEVERITY_SEVERE,
-    RULE_JUDGEMENT_REASON_MISMATCH: SEVERITY_SEVERE,  # 【提案】使用者未分級
+    RULE_JUDGEMENT_REASON_MISMATCH: SEVERITY_SEVERE,
     RULE_ACCOUNT_NOT_IN_LIST: SEVERITY_SEVERE,
     RULE_ACCOUNT_WRONG_STATEMENT: SEVERITY_SEVERE,
     RULE_ACCOUNT_EXCLUDED: SEVERITY_SEVERE,
@@ -197,8 +212,8 @@ P2_CHECK_RULES: dict[str, str] = {
     RULE_CITATION_FUZZY: SEVERITY_MINOR,
     RULE_QUOTE_MISSING_FOR_AB: SEVERITY_MINOR,
     RULE_INSUFFICIENT_WITHOUT_GAP: SEVERITY_MINOR,
-    RULE_ALTERNATIVE_EQUALS_MAIN: SEVERITY_MINOR,  # 【提案】使用者未分級
-    RULE_EXPLANATION_EMPTY: SEVERITY_MINOR,  # 【提案】使用者未分級
+    RULE_ALTERNATIVE_EQUALS_MAIN: SEVERITY_MINOR,
+    RULE_EXPLANATION_EMPTY: SEVERITY_MINOR,  # pydantic 已擋空白，此規則為備援（例如人工檔）
 }
 
 CHECK_RULES_BY_STAGE: dict[str, dict[str, str]] = {"S4": P1_CHECK_RULES, "S6": P2_CHECK_RULES}

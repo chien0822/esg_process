@@ -231,7 +231,7 @@ def test_api_error_marks_item_failed_and_continues(project, make_runner):
     assert rec.reports[REALTEK].stages["reason"].items_failed == 2
 
 
-def test_production_registry_parses_then_stops_at_locate(project):
+def test_production_registry_parses_and_locates(project):
     import io
 
     import pymupdf
@@ -252,9 +252,10 @@ def test_production_registry_parses_then_stops_at_locate(project):
 
     rec = Runner(project, console=Console(file=io.StringIO())).run(RunOptions(build_site=False)).record
     r = rec.reports[REALTEK]
-    assert r.status == "失敗" and "M2" in r.error
+    # 一頁、沒有目錄的 PDF：S2 跑完但找不到策略表，停在 S2（不需要 LLM）
+    assert r.status == "未找到氣候策略表", r.error
     assert r.stages["parse"].status == "completed" and r.stages["parse"].parse_cache_hit is False
-    assert r.stages["locate"].status == "not_implemented"
+    assert r.stages["locate"].status == "completed" and r.stages["locate"].llm_calls == 0
     assert (project / "runs" / rec.run_id / REALTEK / "01_pages.jsonl").exists()
 
 

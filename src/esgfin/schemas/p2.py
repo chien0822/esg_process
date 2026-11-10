@@ -6,7 +6,9 @@
 
 from __future__ import annotations
 
-from typing import Generic, Literal, TypeVar
+from typing import Annotated, Generic, Literal, TypeVar
+
+from pydantic import AfterValidator
 
 from esgfin.constants import (
     ALL_ACCOUNT_NAMES,
@@ -27,6 +29,17 @@ from esgfin.constants import (
 from .base import ZhModel, zh
 
 AccountT = TypeVar("AccountT")
+
+
+def _not_blank(v: str) -> str:
+    if not v.strip():
+        raise ValueError("傳導說明不得為空白")
+    return v
+
+
+# 去空白後至少 1 字；空白時 pydantic 驗證失敗而附錯誤重問（SPEC 17.5 第 3 點）。
+# 用 AfterValidator 而非 pattern，不改變送給 Gemini 的 schema
+NonBlankStr = Annotated[str, AfterValidator(_not_blank)]
 
 
 class UnderstandingField(ZhModel):
@@ -57,7 +70,7 @@ class Understanding(ZhModel):
 
 class Channel(ZhModel):
     channel: Literal[CHANNELS] = zh("管道")
-    explanation: str = zh("傳導說明")
+    explanation: NonBlankStr = zh("傳導說明")
 
 
 class AccountImpact(ZhModel, Generic[AccountT]):
@@ -67,7 +80,7 @@ class AccountImpact(ZhModel, Generic[AccountT]):
     directness: Literal[DIRECTNESS_LEVELS] = zh("直接性層級")
     evidence_grade: Literal[EVIDENCE_GRADES] = zh("證據等級")
     stage: Literal[OCCURRENCE_STAGES] = zh("發生階段")
-    explanation: str = zh("傳導說明")
+    explanation: NonBlankStr = zh("傳導說明")
     basis_quote: str | None = zh("原文依據")
     alternatives: list[Literal[ALL_ACCOUNT_NAMES]] = zh("替代科目")
 

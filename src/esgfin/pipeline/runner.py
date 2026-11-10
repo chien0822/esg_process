@@ -98,6 +98,7 @@ class StageRegistry:
 
     @classmethod
     def production(cls) -> "StageRegistry":
+        from esgfin.locate.stage import run_locate
         from esgfin.parse.stage import run_parse
         from esgfin.site.build import build_site
 
@@ -105,7 +106,7 @@ class StageRegistry:
             fns={
                 "explore": run_explore,
                 "parse": run_parse,
-                "locate": _not_implemented("S2", "定位", "M2"),
+                "locate": run_locate,
                 "extract": _not_implemented("S3", "方法一擷取", "M3"),
                 "p1check": _not_implemented("S4", "完整度檢查", "M5"),
                 "check": _not_implemented("S6", "檢查模組", "M5"),

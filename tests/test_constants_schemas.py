@@ -106,3 +106,16 @@ def test_time_horizon_is_free_text():
         assert item.time_horizon == value
     schema = P1ItemDraft.model_json_schema(by_alias=True)["properties"]["影響時間"]
     assert "enum" not in str(schema)
+
+
+def test_blank_explanation_rejected_without_changing_llm_schema():
+    import pytest
+    from pydantic import ValidationError
+
+    from esgfin.llm.service import llm_schema
+    from esgfin.schemas.p2 import Channel, P2Result
+
+    with pytest.raises(ValidationError, match="傳導說明不得為空白"):
+        Channel.model_validate({"管道": "收入", "傳導說明": "  \n "})
+    assert Channel.model_validate({"管道": "收入", "傳導說明": "需求→收入"}).explanation == "需求→收入"
+    assert "pattern" not in str(llm_schema(P2Result)) and "minLength" not in str(llm_schema(P2Result))

@@ -25,12 +25,21 @@ pricing:                        # 只用於估算花費；請依官方價目表�
   output_usd_per_million_tokens: null
 
 parse:
-  parser: docling               # docling / pymupdf4llm【M1 比較後決定】
+  parser: docling               # docling / pymupdf4llm【已決定 10/29：Docling】
   min_text_page_ratio: 0.5      # 有文字層的頁數比例低於此值視為掃描檔，停止該份
 
 locate:
   toc_scan_pages: 20            # 沒有書籤時掃描前幾頁找目錄
   section_page_buffer: 1        # 章節範圍前後各加幾頁
+  bookmark_min_entries: 5       # 書籤至少幾項且多數標題有意義才採用，否則找目錄頁
+  toc_min_numbers: 10           # 目錄頁至少要有幾個頁碼數字
+  margin_ratio: 0.12            # 頁首頁尾、側邊欄：距頁面邊緣多少比例內的文字
+  nav_min_pages: 5              # 邊緣文字在至少幾頁重複出現才算導覽列
+  offset_min_agreement: 0.3     # 印刷頁碼位移的眾數至少要符合多少比例的頁
+  min_keyword_hits: 2           # 策略表候選頁至少命中幾個不同關鍵字（已排除導覽列）
+  max_strategy_candidates: 15   # 最多送幾個候選頁給 LLM 判斷
+  max_chars_per_candidate_page: 8000
+  max_index_pages: 8            # 書末索引最多送幾頁給 LLM
 
 extract:
   input_mode: text              # text / text+pdf
@@ -45,4 +54,8 @@ context_card:
 site:
   port: 8765                    # 只綁 127.0.0.1
 
-prompts: {}                     # 例：p2_reasoning: 1 → prompts/p2_reasoning_v1.md（M2 起加入）
+prompts:                        # 名稱: 版本 → prompts/<名稱>_v<版本>.md
+  s2_toc: 1
+  s2_roles: 1
+  s2_strategy: 1
+  s2_index: 1

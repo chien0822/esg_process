@@ -43,7 +43,7 @@ class PricingSettings(StrictModel):
 
 
 class ParseSettings(StrictModel):
-    parser: ParserName = "docling"  # 【待確認 15-6】M1 比較後決定
+    parser: ParserName = "docling"  # 【已決定 10/29】M1 比較後選定
     # 有文字層的頁數比例低於此值即視為掃描檔，停止該份（ver1 不做 OCR）
     min_text_page_ratio: float = Field(default=0.5, gt=0, le=1)
 
@@ -51,6 +51,22 @@ class ParseSettings(StrictModel):
 class LocateSettings(StrictModel):
     toc_scan_pages: int = Field(20, ge=1)
     section_page_buffer: int = Field(1, ge=0)
+    # 書籤至少幾項、且多數標題有意義，才採用書籤（否則改找目錄頁）
+    bookmark_min_entries: int = Field(5, ge=1)
+    # 目錄頁至少要有幾個 1–3 位數字（頁碼）
+    toc_min_numbers: int = Field(10, ge=1)
+    # 頁首頁尾與側邊欄：距頁面邊緣多少比例內的文字
+    margin_ratio: float = Field(0.12, gt=0, lt=0.5)
+    # 邊緣文字在至少幾頁重複出現才算導覽列
+    nav_min_pages: int = Field(5, ge=2)
+    # 印刷頁碼位移：至少多少比例的頁符合眾數才採用
+    offset_min_agreement: float = Field(0.3, gt=0, le=1)
+    # 策略表候選頁：至少命中幾個不同關鍵字；最多送幾頁給 LLM
+    min_keyword_hits: int = Field(2, ge=1)
+    max_strategy_candidates: int = Field(15, ge=1)
+    max_chars_per_candidate_page: int = Field(8000, ge=500)
+    # 書末索引：最多送幾頁給 LLM
+    max_index_pages: int = Field(8, ge=1)
 
 
 class ExtractSettings(StrictModel):
