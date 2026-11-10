@@ -13,7 +13,7 @@ from esgfin.constants import FLAG_CORRECTED_BY_CHILD, FLAG_PARENT_AFTER_CHILD, R
 from esgfin.llm.base import DocumentPart
 from esgfin.llm.fake import FakeLLM
 from esgfin.locate.layout import analyze, is_nav_line, page_offset, strip_nav
-from esgfin.locate.toc import TocEntry, bookmarks_usable, check_rules
+from esgfin.locate.toc import TocEntry, bookmarks_usable, check_rules, find_toc_pages
 from esgfin.parse.stage import run_parse
 from esgfin.pipeline.runner import RunOptions
 from esgfin.schemas.base import read_model
@@ -199,3 +199,20 @@ def test_rule_checks_flag_without_silent_skip():
 
 def test_normalize_keeps_hyphenated_codes():
     assert normalize("| GRI 201-2 |\n|---|\n**１，７７０** 萬<br>") == "GRI201-21,770萬"
+
+
+def test_toc_continuation_page_without_keyword(tmp_path):
+    """跨頁目錄：續頁沒有「目錄」字樣，但頁碼行夠多（瑞昱 p.3–4）。"""
+    doc = pymupdf.open()
+    pages = [
+        ["目錄"] + [f"第{i}節 {i * 3}" for i in range(1, 6)] + [str(i) for i in range(10, 16)],
+        ["CH3 綠色營運"] + [str(i) for i in range(70, 82)],  # 續頁：12 行只有頁碼
+        ["關於本報告書", "本報告書涵蓋 2024 年 1 月 1 日至 12 月 31 日", "5"],
+    ]
+    for lines in pages:
+        page = doc.new_page()
+        for i, line in enumerate(lines):
+            page.insert_text((72, 60 + 18 * i), line, fontname="china-t", fontsize=10)
+    pdf = tmp_path / "toc.pdf"
+    doc.save(pdf)
+    assert find_toc_pages(analyze(pdf, 0.12, 5), scan_pages=20, min_numbers=10) == [1, 2]

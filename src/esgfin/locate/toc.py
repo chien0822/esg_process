@@ -23,6 +23,8 @@ from .layout import Layout
 
 _CODE_LIKE = re.compile(r"^[A-Za-z]{0,3}\s*\d+(\.\d+)*$")  # 「ch1」「1.1」：只有編號、沒有標題
 _NUMBER = re.compile(r"(?<!\d)\d{1,3}(?!\d)")
+# 目錄的頁碼行：整行只有 1–3 位數字，或以點線接頁碼結尾（「1.1 關於廣達. . . .09」）
+_PAGE_NUMBER_LINE = re.compile(r"^\d{1,3}$|([.．…·]\s*){3,}\d{1,3}$")
 
 
 @dataclass
@@ -49,18 +51,28 @@ def bookmarks_usable(toc: list[list], min_entries: int) -> tuple[bool, str]:
     return True, f"書籤 {len(toc)} 項"
 
 
+def _page_number_lines(text: str) -> int:
+    return sum(1 for line in text.splitlines() if _PAGE_NUMBER_LINE.search(line.strip()))
+
+
 def find_toc_pages(layout: Layout, scan_pages: int, min_numbers: int) -> list[int]:
-    """前 scan_pages 頁中含「目錄／Contents」且頁碼數字夠多的頁；連續的目錄頁一併取。"""
-    hits = []
-    for n in range(1, min(scan_pages, layout.page_count) + 1):
-        text = layout.pages[n].text
-        if any(k in text for k in TOC_PAGE_KEYWORDS) and len(_NUMBER.findall(text)) >= min_numbers:
-            hits.append(n)
-    if not hits:
+    """前 scan_pages 頁中第一個含「目錄／Contents」且頁碼數字夠多的頁。
+
+    之後緊接的頁若頁碼行夠多，視為目錄的續頁（跨頁目錄常只有第一頁寫「目錄」，例如瑞昱 p.3–4）。
+    """
+    last = min(scan_pages, layout.page_count)
+    first = next(
+        (
+            n
+            for n in range(1, last + 1)
+            if any(k in layout.pages[n].text for k in TOC_PAGE_KEYWORDS) and len(_NUMBER.findall(layout.pages[n].text)) >= min_numbers
+        ),
+        None,
+    )
+    if first is None:
         return []
-    first = hits[0]
     pages = [first]
-    while pages[-1] + 1 in hits:
+    while pages[-1] < layout.page_count and _page_number_lines(layout.pages[pages[-1] + 1].text) >= min_numbers:
         pages.append(pages[-1] + 1)
     return pages
 
