@@ -18,17 +18,20 @@ from esgfin.schemas.meta import ReportMeta
 from esgfin.schemas.p1 import P1Extraction, P1Item, P1Items, make_item_code
 from esgfin.schemas.p2 import P2Failure, P2Result
 from esgfin.schemas.pages import PageRecord
+from esgfin.schemas.tables import ReconstructedTable, ReconstructedTables, TableCheckReport, TableRow
 from esgfin.site.build import build_site
 
 EVENT_1 = "電價上漲，每年約增加電費 1,770 萬元"
 EVENT_2 = "極端降雨造成廠區淹水"
 
 
-def p1_item_dict(event: str, page: int, item_type: str = "轉型風險", sub: str = "市場") -> dict:
+def p1_item_dict(event: str, item_type: str = "轉型風險", sub: str = "市場") -> dict:
+    """S3 LLM 回應中的一個條目（不含代碼、方法、來源列、頁碼；那些由程式填）。"""
     return {
         "類型": item_type,
         "子類別": sub,
         "子類別來源": "AI歸類",
+        "子類別原文用語": None,
         "事件描述": event,
         "影響時間": "中",
         "影響時間原文用語": "中期",
@@ -37,17 +40,23 @@ def p1_item_dict(event: str, page: int, item_type: str = "轉型風險", sub: st
         "衝擊強度": None,
         "衝擊強度原文用語": None,
         "影響範圍": "全公司",
+        "影響範圍原文用語": None,
         "顯示財務Impact": "營運成本增加",
         "因應措施備註": None,
         "原文內容": {"事件描述": event, "顯示財務Impact": "營運成本增加", "因應措施備註": None},
-        "頁碼": [page],
     }
 
 
 EXTRACTION = {
-    "column_mapping": [{"原表欄位": "氣候影響事件", "對應欄位": "事件描述"}],
-    "items": [p1_item_dict(EVENT_1, 2), p1_item_dict(EVENT_2, 3, "實體風險", "急性")],
+    "column_mapping": [{"欄序": 1, "原表欄位": "氣候影響事件", "對應欄位": "事件描述"}],
+    "items": [p1_item_dict(EVENT_1), p1_item_dict(EVENT_2, "實體風險", "急性")],
 }
+
+
+def full_item(code: str = "c", draft: dict | None = None, page: int = 2, row: int = 1) -> dict:
+    """03_p1_items.json 的一個條目（中文 key，欄位順序同 P1Item）。"""
+    return {"代碼": code, "方法": "方法一", "來源列": {"pdf_page": page, "row_on_page": row},
+            **(draft or EXTRACTION["items"][0]), "頁碼": [page]}
 
 
 def p2_dict(code: str, impact: bool = True) -> dict:
@@ -107,6 +116,13 @@ def fake_locate_no_table(ctx: ReportContext) -> None:
     write_model(ctx.report_dir / "02_manifest.json", Manifest(report_id=ctx.report_id, toc_source=None, page_offset=None))
 
 
+def fake_tables(ctx: ReportContext) -> None:
+    table = ReconstructedTable(pages=[2, 3], header=["氣候影響事件"], rows=[
+        TableRow(pdf_page=2, row_on_page=1, cells=[EVENT_1]), TableRow(pdf_page=3, row_on_page=1, cells=[EVENT_2])])
+    write_model(ctx.report_dir / "03a_tables.json", ReconstructedTables(report_id=ctx.report_id, input_mode="text", tables=[table]))
+    write_model(ctx.report_dir / "03a_table_check.json", TableCheckReport(report_id=ctx.report_id, input_mode="text", passed=True, tables=[]))
+
+
 def fake_extract(ctx: ReportContext) -> None:
     info = ctx.prompts["p1_extract"]
     req = LLMRequest("p1_extract", info.version, load_prompt(ctx.paths.root, info), (TextPart("頁面"),), llm_schema(P1Extraction))
@@ -114,7 +130,8 @@ def fake_extract(ctx: ReportContext) -> None:
     assert res.value is not None, res.error
     meta = read_model(ctx.report_dir / "00_meta.json", ReportMeta)
     items = [
-        P1Item(code=make_item_code(meta.stock_code, meta.report_year, i), method="方法一", **d.model_dump())
+        P1Item(code=make_item_code(meta.stock_code, meta.report_year, i), method="方法一",
+               source_row={"pdf_page": i + 1, "row_on_page": 1}, pages=[i + 1], **d.model_dump())
         for i, d in enumerate(res.value.items, 1)
     ]
     write_model(ctx.report_dir / "03_p1_items.json", P1Items(report_id=ctx.report_id, column_mapping=res.value.column_mapping, items=items))
@@ -162,6 +179,7 @@ def fake_registry(**overrides) -> StageRegistry:
         "explore": run_explore,
         "parse": fake_parse,
         "locate": fake_locate,
+        "tables": fake_tables,
         "extract": fake_extract,
         "p1check": fake_p1check,
         "check": fake_check,

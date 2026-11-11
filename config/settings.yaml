@@ -45,7 +45,7 @@ locate:
   max_index_pages: 8            # 書末索引最多送幾頁給 LLM
 
 extract:
-  input_mode: text              # text / text+pdf
+  input_mode: text+pdf          # text / text+pdf；作用於 S3a 表格重建（SPEC 7.6），S3 一律只吃重建表文字
 
 check:
   citation_page_buffer: 1       # 引文驗證比對頁的前後緩衝
@@ -62,3 +62,6 @@ prompts:                        # 名稱: 版本 → prompts/<名稱>_v<版本>.
   s2_roles: 1
   s2_strategy: 1
   s2_index: 1
+  s3a_table: 1
+  s3_extract: 3                 # v3：同義詞表命中即填「原文」（11/12 同義詞表加入極端性氣候、氣候模式改變）；v2：等級整欄判斷
+  ref_tcfd_examples: 1          # S3 的 TCFD 例句參考檔（不是提示，但同樣記錄版本與雜湊）

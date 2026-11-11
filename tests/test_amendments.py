@@ -13,7 +13,7 @@ from esgfin.schemas.final import FinalItem
 from esgfin.schemas.pages import PageRecord
 from esgfin.site.build import accounts_lines
 
-from fakes import EXTRACTION, fake_registry
+from fakes import fake_registry, full_item
 
 REALTEK = "realtek_2024_ESG"
 
@@ -87,6 +87,6 @@ def test_parse_cache_roundtrip_and_version_key(tmp_path):
 
 
 def test_check_failed_item_shown_as_such():
-    base = {"代碼": "c", "方法": "方法一", **EXTRACTION["items"][0]}
+    base = full_item("c")
     item = FinalItem.model_validate({**base, "推理狀態": "檢查未通過", "整體判斷": "無影響"})
     assert accounts_lines(item) == ["檢查未通過"]

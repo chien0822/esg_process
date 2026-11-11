@@ -7,6 +7,7 @@
 |---|---|
 | S1 解析 | `01_pages.jsonl` |
 | S2 定位 | `02_manifest.json`（例如手動指定策略表頁碼，`found_by` 填 `override`） |
+| S3a 表格重建 | `03a_tables.json`（只放這一個；程式仍會以 Docling 格子檢查，未通過就停下來。`input_mode` 填 `override`） |
 | S3 方法一 | `03_p1_items.json` |
 | S5 P2 推理 | `05_p2/<代碼>.json`（可逐條目取代） |
 | S7 彙整 | `07_final.json` 與 `07_metrics.json`（兩個都要有） |

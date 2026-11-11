@@ -49,6 +49,7 @@ class StageRecord(StrictModel):
     validation_retries: int = 0
     key_order_issue_calls: int = 0  # 回應 key 順序與 schema 不同的呼叫數
     parse_cache_hit: bool | None = None  # S1：是否直接使用解析快取
+    check_retries: int | None = None  # S3a：程式檢查未通過、附錯誤重問的次數
     error: str | None = None
     # 階段結束時的程式版本（可追溯每個輸出是哪一版程式產生）
     git_commit: str | None = None

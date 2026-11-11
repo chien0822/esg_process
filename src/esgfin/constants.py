@@ -68,7 +68,7 @@ METHODS: tuple[str, ...] = (METHOD_1,)
 
 ITEM_TYPES: tuple[str, ...] = ("轉型風險", "實體風險", "機會")
 
-# 子類別（TCFD）【提案，待使用者對照 TCFD 原文】
+# 子類別（TCFD）：清單不變【已決定 11/11】；分類已以二手來源核對（SPEC 7.4）
 SUBCATEGORIES: dict[str, tuple[str, ...]] = {
     "轉型風險": ("政策與法規", "技術", "市場", "聲譽"),
     "實體風險": ("急性", "慢性"),
@@ -77,6 +77,44 @@ SUBCATEGORIES: dict[str, tuple[str, ...]] = {
 ALL_SUBCATEGORIES: tuple[str, ...] = tuple(dict.fromkeys(s for v in SUBCATEGORIES.values() for s in v))
 
 SUBCATEGORY_SOURCES: tuple[str, ...] = ("原文", "AI歸類")
+SUBCATEGORY_SOURCE_ORIGINAL = "原文"
+
+# 子類別同義詞表：原文用語 → TCFD 子類別（SPEC 7.4）。用於 S3 提示與 S4 檢查，不取代 LLM 判斷。
+# 比對方式：原文用語正規化（textnorm.normalize）後整串相等才算命中，不做子字串比對。
+SUBCATEGORY_SYNONYMS: dict[str, str] = {
+    # 【已決定 11/11】
+    "立即性": "急性",
+    "長期性": "慢性",
+    "名譽": "聲譽",
+    "商譽": "聲譽",
+    "政策和法規": "政策與法規",
+    # 【提案】一般性用語；「產品和服務」為 TCFD 中譯本 Table 2 的用詞
+    "政策與法令要求": "政策與法規",
+    "法規風險": "政策與法規",
+    "市場風險": "市場",
+    "技術風險": "技術",
+    "產品和服務": "產品與服務",
+    # 【已決定 11/12】TCFD 定義：急性＝極端天氣事件、慢性＝氣候模式的長期改變，各自唯一對應
+    "極端性氣候": "急性",
+    "氣候模式改變": "慢性",
+}
+
+# S3 欄位對應（column_mapping 的「對應欄位」，SPEC 7.3、7.5）
+FIELD_UNUSED = "未使用"
+P1_MAPPABLE_FIELDS: tuple[str, ...] = (
+    "類型",
+    "子類別",
+    "事件描述",
+    "影響時間",
+    "發生可能性",
+    "衝擊強度",
+    "影響範圍",
+    "顯示財務Impact",
+    "因應措施備註",
+    FIELD_UNUSED,
+)
+FIELD_TYPE = "類型"
+FIELD_SUBCATEGORY = "子類別"
 TIME_HORIZONS: tuple[str, ...] = ("短", "中", "長")  # 影響時間的提示用詞；欄位本身不限定（SPEC 7.3 v2）
 LEVELS: tuple[str, ...] = ("低", "中", "高")
 IMPACT_SCOPES: tuple[str, ...] = ("全公司", "特定單位或據點", "子公司", "供應商", "上下游")
@@ -177,6 +215,9 @@ SEVERITIES: tuple[str, ...] = (SEVERITY_SEVERE, SEVERITY_MINOR)
 RULE_SUBCATEGORY_MISMATCH = "子類別與類型不符"
 RULE_CITATION_FAIL = "引文未通過"
 RULE_CITATION_FUZZY = "引文模糊通過"
+RULE_QUOTE_NOT_IN_ROW = "引文不在對應列"  # 11/11（SPEC 8）
+RULE_SUBCATEGORY_RAW_MISMATCH = "子類別原文用語與對應列不符"
+RULE_SUBCATEGORY_SYNONYM_CONFLICT = "子類別來源與同義詞表矛盾"
 
 RULE_JUDGEMENT_TABLE_MISMATCH = "整體判斷與表格矛盾"
 RULE_JUDGEMENT_REASON_MISMATCH = "整體判斷與無影響理由類型矛盾"
@@ -194,6 +235,9 @@ RULE_EXPLANATION_EMPTY = "傳導說明空白"
 # S4：檢查 P1（03_p1_items.json）
 P1_CHECK_RULES: dict[str, str] = {
     RULE_SUBCATEGORY_MISMATCH: SEVERITY_SEVERE,
+    RULE_QUOTE_NOT_IN_ROW: SEVERITY_SEVERE,  # 以下三條嚴重度為【提案】（SPEC 8）
+    RULE_SUBCATEGORY_RAW_MISMATCH: SEVERITY_SEVERE,
+    RULE_SUBCATEGORY_SYNONYM_CONFLICT: SEVERITY_SEVERE,
     RULE_CITATION_FAIL: SEVERITY_MINOR,  # 原文內容
     RULE_CITATION_FUZZY: SEVERITY_MINOR,
 }

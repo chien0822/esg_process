@@ -1,6 +1,6 @@
 """階段定義（SPEC 3.2）與輸出檔有效性判斷。
 
-每份報告書依序跑 S0–S7；S8 網頁是全域階段，在所有報告書之後執行一次。
+每份報告書依序跑 S0–S7（S2 與 S3 之間有 S3a 表格重建）；S8 網頁是全域階段，在所有報告書之後執行一次。
 """
 
 from __future__ import annotations
@@ -18,6 +18,7 @@ from esgfin.schemas.meta import ReportMeta
 from esgfin.schemas.p1 import P1Items
 from esgfin.schemas.p2 import P2Result
 from esgfin.schemas.pages import PageRecord
+from esgfin.schemas.tables import ReconstructedTables, TableCheckReport
 
 
 @dataclass(frozen=True)
@@ -28,6 +29,9 @@ class StageSpec:
     outputs: tuple[str, ...]  # 相對於 runs/<run_id>/<report_id>/
     uses_llm: bool
     per_item: bool = False  # S5：一個條目一個檔案
+    # 可由人工檔取代的輸出（None = 全部 outputs）；run_after_override = 放入人工檔後仍執行階段函式（S3a 要對人工表格跑檢查）
+    override_outputs: tuple[str, ...] | None = None
+    run_after_override: bool = False
 
 
 P2_DIR = "05_p2"
@@ -36,6 +40,10 @@ REPORT_STAGES: tuple[StageSpec, ...] = (
     StageSpec("explore", "S0", "探索", ("00_meta.json",), False),
     StageSpec("parse", "S1", "解析", ("01_pages.jsonl",), False),
     StageSpec("locate", "S2", "定位", ("02_manifest.json",), True),
+    StageSpec(
+        "tables", "S3a", "表格重建", ("03a_tables.json", "03a_table_check.json"), True,
+        override_outputs=("03a_tables.json",), run_after_override=True,
+    ),
     StageSpec("extract", "S3", "方法一擷取", ("03_p1_items.json",), True),
     StageSpec("p1check", "S4", "完整度檢查", ("04_p1_check.json",), False),
     StageSpec("reason", "S5", "P2 推理", (P2_DIR,), True, per_item=True),
@@ -51,6 +59,8 @@ STAGE_BY_KEY: dict[str, StageSpec] = {s.key: s for s in ALL_STAGES}
 OUTPUT_MODELS: dict[str, type[BaseModel]] = {
     "00_meta.json": ReportMeta,
     "02_manifest.json": Manifest,
+    "03a_tables.json": ReconstructedTables,
+    "03a_table_check.json": TableCheckReport,
     "03_p1_items.json": P1Items,
     "04_p1_check.json": P1Check,
     "06_check_report.json": CheckReport,

@@ -7,7 +7,6 @@ LLM 只用在目錄解析、角色分類、策略表判斷與書末索引；其�
 from __future__ import annotations
 
 from collections import Counter
-from pathlib import Path
 
 from esgfin.constants import (
     INDEX_PAGE_KEYWORDS,
@@ -15,6 +14,7 @@ from esgfin.constants import (
 )
 from esgfin.llm.base import DocumentPart, LLMRequest, TextPart
 from esgfin.llm.service import llm_schema
+from esgfin.pdfpages import pdf_bytes as _pdf_bytes
 from esgfin.pipeline.context import ReportContext
 from esgfin.pipeline.prompts import load_prompt
 from esgfin.schemas.base import read_jsonl, write_json, write_model
@@ -38,16 +38,6 @@ def _ask(ctx: ReportContext, prompt: str, parts: list, model, step: str):
     if res.value is None:
         raise RuntimeError(f"S2 {step}：LLM 未能產生有效輸出（{res.error}）")
     return res.value
-
-
-def _pdf_bytes(pdf: Path, pages: list[int]) -> bytes:
-    import pymupdf
-
-    with pymupdf.open(pdf) as src, pymupdf.open() as out:
-        for n in pages:
-            out.insert_pdf(src, from_page=n - 1, to_page=n - 1)
-        # no_new_id：不寫入新的檔案 ID，同樣的頁每次產生相同位元組，LLM 快取才會命中
-        return out.tobytes(no_new_id=True)
 
 
 def _page_block(n: int, text: str, limit: int) -> str:

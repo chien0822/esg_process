@@ -11,7 +11,7 @@ from esgfin.schemas.p1 import P1Item, P1Items, make_item_code
 from esgfin.schemas.p2 import P2Result
 from esgfin.schemas.settings import Settings
 
-from fakes import EXTRACTION, p2_dict
+from fakes import EXTRACTION, full_item, p2_dict
 
 
 def test_account_lists():
@@ -27,10 +27,10 @@ def test_item_code_format():
 
 
 def test_p1_item_roundtrip_uses_chinese_keys_and_code_first():
-    d = {"代碼": "2379-2024-M1-001", "方法": "方法一", **EXTRACTION["items"][0]}
+    d = full_item("2379-2024-M1-001")
     item = P1Item.model_validate(d)
     dumped = item.model_dump(by_alias=True)
-    assert list(dumped)[:3] == ["代碼", "方法", "類型"]
+    assert list(dumped)[:4] == ["代碼", "方法", "來源列", "類型"] and list(dumped)[-1] == "頁碼"
     assert dumped == d
     P1Items.model_validate_json(P1Items(report_id="r", column_mapping=[], items=[item]).model_dump_json())
 
@@ -64,7 +64,7 @@ def test_p2_account_must_match_statement_and_direction():
 
 
 def test_final_item_no_impact_string():
-    d = {"代碼": "c", "方法": "方法一", **EXTRACTION["items"][0], "推理狀態": "成功", "整體判斷": "無影響",
+    d = {**full_item("c"), "推理狀態": "成功", "整體判斷": "無影響",
          "潛在受影響會計科目": "無影響", "影響方向": "不影響", "無影響理由類型": "與財務無關"}
     item = FinalItem.model_validate(d)
     assert item.top_accounts == "無影響"

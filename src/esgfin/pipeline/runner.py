@@ -98,17 +98,21 @@ class StageRegistry:
 
     @classmethod
     def production(cls) -> "StageRegistry":
+        from esgfin.check.p1check import run_p1check
+        from esgfin.extract.stage import run_extract
         from esgfin.locate.stage import run_locate
         from esgfin.parse.stage import run_parse
         from esgfin.site.build import build_site
+        from esgfin.tables.stage import run_tables
 
         return cls(
             fns={
                 "explore": run_explore,
                 "parse": run_parse,
                 "locate": run_locate,
-                "extract": _not_implemented("S3", "方法一擷取", "M3"),
-                "p1check": _not_implemented("S4", "完整度檢查", "M5"),
+                "tables": run_tables,
+                "extract": run_extract,
+                "p1check": run_p1check,
                 "check": _not_implemented("S6", "檢查模組", "M5"),
                 "aggregate": _not_implemented("S7", "彙整", "M5"),
             },
@@ -125,6 +129,7 @@ class RunOptions:
     source: str | None = None  # 來源 run_id；None = 最新
     build_site: bool = True
     strict: bool = False  # 正式實驗：有未提交修改或 commit 與 run 開始時不同就拒絕執行
+    input_mode: str | None = None  # 覆寫 extract.input_mode（S3a 兩種模式比較用）；記錄在 run.json 的 settings
 
 
 def list_runs(paths: ProjectPaths) -> list[str]:
@@ -233,6 +238,10 @@ class Runner:
     def run(self, opts: RunOptions) -> RunRecorder:
         self._strict = opts.strict
         settings = load_settings(self.paths.settings_file)
+        if opts.input_mode:
+            if opts.resume:
+                raise RunSetupError("--input-mode 不能與 --resume 同時使用（接續會沿用原 run 的設定）")
+            settings = settings.model_copy(update={"extract": settings.extract.model_copy(update={"input_mode": opts.input_mode})})
         reports_cfg = load_reports(self.paths.reports_file)
         prompts = resolve_prompts(self.paths.prompts_dir, settings.prompts, self.paths.root)
 
@@ -437,7 +446,13 @@ class Runner:
             if changed is not None:
                 srec.status = "override"
                 self.console.print(f"  {spec.code} {spec.label}：使用人工檔 overrides/{ctx.report_id}/")
-                return force or changed
+                if not spec.run_after_override:
+                    return force or changed
+                ctx.stage_record = srec
+                self.registry.fns[spec.key](ctx)  # 例如 S3a：對人工表格跑同樣的檢查
+                if not stage_complete(ctx.report_dir, spec):
+                    raise RuntimeError(f"{spec.code} 執行完畢但輸出檔不完整或未通過 schema 驗證")
+                return True
             if not force and stage_complete(ctx.report_dir, spec):
                 srec.status = "skipped_existing"
                 self.console.print(f"  {spec.code} {spec.label}：已有有效輸出，跳過")
@@ -517,15 +532,16 @@ class Runner:
     def _apply_override(self, ctx: ReportContext, spec: StageSpec, rec: ReportRunRecord) -> bool | None:
         """有人工檔就驗證後寫入輸出位置。回傳 None = 沒有人工檔；否則回傳輸出是否改變。"""
         odir = self.paths.override_dir(ctx.report_id)
-        present = [n for n in spec.outputs if (odir / n).exists()]
+        names = spec.override_outputs or spec.outputs
+        present = [n for n in names if (odir / n).exists()]
         if not present:
             return None
-        if len(present) != len(spec.outputs):
-            missing = sorted(set(spec.outputs) - set(present))
+        if len(present) != len(names):
+            missing = sorted(set(names) - set(present))
             raise RunSetupError(f"overrides/{ctx.report_id}/ 只有部分 {spec.code} 輸出檔，缺：{', '.join(missing)}")
         changed = False
         rec.overrides = [o for o in rec.overrides if o.stage != spec.key]
-        for name in spec.outputs:
+        for name in names:
             src = odir / name
             dst = ctx.report_dir / name
             try:

@@ -70,7 +70,8 @@ class LocateSettings(StrictModel):
 
 
 class ExtractSettings(StrictModel):
-    input_mode: Literal["text", "text+pdf"] = "text"
+    # 作用於 S3a 表格重建（SPEC 7.6）：text 只給文字；text+pdf 另給策略表的 PDF 頁面。S3 一律只吃重建表文字
+    input_mode: Literal["text", "text+pdf"] = "text+pdf"
 
 
 class CheckSettings(StrictModel):
