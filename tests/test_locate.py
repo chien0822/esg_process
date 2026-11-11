@@ -256,3 +256,12 @@ def test_index_points_to_section_number_and_title_dot():
     e = TocEntry("2.1 .公司治理", 2, "2.1 .公司治理. . . .33", pdf_page=2)
     check_titles([e], layout, 1)
     assert e.flags == [] and e.title == "2.1 .公司治理"  # manifest 標題保留原文
+
+
+def test_title_dot_strip_keeps_section_numbers():
+    from esgfin.locate.toc import _DOT_AFTER_NUMBER
+
+    strip = lambda t: _DOT_AFTER_NUMBER.sub(r"\1 ", t)  # noqa: E731
+    assert normalize(strip("2.1 .公司治理")) == normalize("2.1 公司治理")
+    for title in ("1.1 關於廣達", "3.1.2 氣候承諾與行動", "3 永續環境", "CH3 綠色營運"):
+        assert strip(title) == title

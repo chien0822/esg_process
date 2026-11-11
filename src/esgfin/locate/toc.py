@@ -24,7 +24,7 @@ from .layout import Layout
 _CODE_LIKE = re.compile(r"^[A-Za-z]{0,3}\s*\d+(\.\d+)*$")  # 「ch1」「1.1」：只有編號、沒有標題
 _SECTION_NUMBER = re.compile(r"^\s*(\d+(?:\.\d+)*)")
 # 編號後多餘的點：「2.1 .公司治理」（廣達目錄文字層原文如此）
-_DOT_AFTER_NUMBER = re.compile(r"^(\s*\d+(?:\.\d+)*)\s*[.．、]\s*")
+_DOT_AFTER_NUMBER = re.compile(r"^(\s*\d+(?:\.\d+)*)\s*[.．、](?!\d)\s*")  # 點後不可接數字，否則「1.1」會被拆開
 _NUMBER = re.compile(r"(?<!\d)\d{1,3}(?!\d)")
 # 目錄的頁碼行：整行只有 1–3 位數字，或以點線接頁碼結尾（「1.1 關於廣達. . . .09」）
 _PAGE_NUMBER_LINE = re.compile(r"^\d{1,3}$|([.．…·]\s*){3,}\d{1,3}$")
