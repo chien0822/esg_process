@@ -102,6 +102,7 @@ class StageRegistry:
         from esgfin.extract.stage import run_extract
         from esgfin.locate.stage import run_locate
         from esgfin.parse.stage import run_parse
+        from esgfin.reason.stage import reason_item
         from esgfin.site.build import build_site
         from esgfin.tables.stage import run_tables
 
@@ -116,7 +117,7 @@ class StageRegistry:
                 "check": _not_implemented("S6", "檢查模組", "M5"),
                 "aggregate": _not_implemented("S7", "彙整", "M5"),
             },
-            reason_item=None,  # M4
+            reason_item=reason_item,
             build_site=build_site,
         )
 
@@ -130,6 +131,7 @@ class RunOptions:
     build_site: bool = True
     strict: bool = False  # 正式實驗：有未提交修改或 commit 與 run 開始時不同就拒絕執行
     input_mode: str | None = None  # 覆寫 extract.input_mode（S3a 兩種模式比較用）；記錄在 run.json 的 settings
+    items: list[str] | None = None  # 試跑：S5 只跑這些條目代碼；記錄在 run.json 的 selected_items
 
 
 def list_runs(paths: ProjectPaths) -> list[str]:
@@ -175,6 +177,8 @@ class Runner:
         self._provider: LLMProvider | None = None
         self._strict = False
         self._warned_commits: set[str | None] = set()
+        self._items: set[str] | None = None  # --items 試跑
+        self._items_found: set[str] = set()
 
     # ------------------------------------------------------------ git 檢查
 
@@ -242,6 +246,8 @@ class Runner:
             if opts.resume:
                 raise RunSetupError("--input-mode 不能與 --resume 同時使用（接續會沿用原 run 的設定）")
             settings = settings.model_copy(update={"extract": settings.extract.model_copy(update={"input_mode": opts.input_mode})})
+        if opts.items and opts.resume:
+            raise RunSetupError("--items 不能與 --resume 同時使用（接續會跑完原 run 的所有條目）")
         reports_cfg = load_reports(self.paths.reports_file)
         prompts = resolve_prompts(self.paths.prompts_dir, settings.prompts, self.paths.root)
 
@@ -250,6 +256,11 @@ class Runner:
         else:
             recorder, configs, source = self._prepare_new(opts, settings, reports_cfg, prompts)
 
+        self._items = self._check_items(opts.items, configs) if opts.items else None
+        self._items_found = set()
+        if self._items is not None:
+            recorder.record.selected_items = sorted(self._items)
+            recorder.save()
         cache = LLMCache(self.paths.llm_cache_dir)
         limiter = RateLimiter(settings.rate_limit.requests_per_minute, settings.rate_limit.tokens_per_minute, sleep=self._sleep)
 
@@ -267,6 +278,10 @@ class Runner:
             )
             self._process_report(ctx, recorder, source)
 
+        if self._items is not None and self._items - self._items_found:
+            missing = "、".join(sorted(self._items - self._items_found))
+            raise RunSetupError(f"--items 指定的條目不在 P1 結果中：{missing}（run {recorder.record.run_id}）")
+
         if opts.build_site and self.registry.build_site is not None:
             self._build_site(recorder, settings)
 
@@ -275,6 +290,15 @@ class Runner:
         recorder.save()
         self._print_summary(recorder)
         return recorder
+
+    @staticmethod
+    def _check_items(items: list[str], configs) -> set[str]:
+        """--items 的代碼須屬於本次處理的報告書（代碼前綴 = 股票代號-年度-）。"""
+        prefixes = {f"{c.stock_code}-{c.report_year}-" for c in configs}
+        bad = [code for code in items if not any(code.startswith(p) for p in prefixes)]
+        if bad:
+            raise RunSetupError(f"--items 的代碼不屬於本次處理的報告書：{'、'.join(bad)}")
+        return set(items)
 
     @staticmethod
     def _mode_label(rec: RunRecord, resumed: bool) -> str:
@@ -494,8 +518,14 @@ class Runner:
             # 上游有變：舊的條目結果不可沿用
             shutil.rmtree(ctx.report_dir / P2_DIR, ignore_errors=True)
         srec.status = "completed"
-        items_total = len(read_model(ctx.report_dir / "03_p1_items.json", P1Items).items)
-        self.console.print(f"  {spec.code} {spec.label}：{items_total} 個條目")
+        codes = [it.code for it in read_model(ctx.report_dir / "03_p1_items.json", P1Items).items]
+        only: set[str] | None = None
+        if self._items is not None:
+            only = self._items & set(codes)
+            self._items_found |= only
+        items_total = len(codes) if only is None else len(only)
+        label = "" if only is None else f"（試跑 --items，全部 {len(codes)} 個）"
+        self.console.print(f"  {spec.code} {spec.label}：{items_total} 個條目{label}")
 
         done = 0
 
@@ -505,7 +535,7 @@ class Runner:
             self.console.print(f"    [{done}/{items_total}] {code}")
             recorder.save()
 
-        outcome = run_per_item(ctx, self.registry.reason_item, on_progress=progress)
+        outcome = run_per_item(ctx, self.registry.reason_item, on_progress=progress, only=only)
         srec.items_total = outcome.total
         srec.items_succeeded = outcome.succeeded
         srec.items_failed = outcome.failed
@@ -522,6 +552,13 @@ class Runner:
             )
         if outcome.failed:
             self.console.print(f"    [yellow]推理失敗 {outcome.failed} 條（--resume 會重新嘗試）[/yellow]")
+        if only is not None and only != set(codes):
+            srec.status = "partial"
+            raise ReportStop(
+                REPORT_STATUS_FAILED,
+                f"試跑（--items）：S5 只執行了 {len(only)} / {len(codes)} 個條目，S6 之後不執行；"
+                "要跑完其餘條目請用 --resume 或 --from-stage reason",
+            )
         # 有任何條目實際執行或被取代，下游就要重跑
         return outcome.skipped < outcome.total or force
 

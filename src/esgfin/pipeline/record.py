@@ -27,6 +27,7 @@ StageStatus = Literal[
     "override",  # 使用 overrides/ 的人工檔
     "failed",
     "not_implemented",
+    "partial",  # S5 只跑了 --items 指定的條目（試跑）
 ]
 
 
@@ -125,6 +126,7 @@ class RunRecord(StrictModel):
     reports_config: dict[str, dict[str, Any]]  # report_id → reports.yaml 該筆設定
     fingerprint: str  # 會影響結果的設定雜湊；--resume 比對用
     selected_reports: list[str]
+    selected_items: list[str] | None = None  # --items 試跑：S5 只跑這些條目代碼
     reports: dict[str, ReportRunRecord] = Field(default_factory=dict)
     site_stage: StageRecord | None = None
     resumes: list[ResumeEvent] = Field(default_factory=list)

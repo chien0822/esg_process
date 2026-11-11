@@ -157,18 +157,27 @@ class LLMService:
         if self.sink:
             self.sink(rec)
 
-    def structured(self, request: LLMRequest, output_model: type[M], *, tag: dict[str, str] | None = None) -> StructuredResult[M]:
+    def structured(
+        self,
+        request: LLMRequest,
+        output_model: type[M],
+        *,
+        tag: dict[str, str] | None = None,
+        params: LLMParams | None = None,
+    ) -> StructuredResult[M]:
+        """params：覆寫本次呼叫的模型參數（例如 S5 用 reason.thinking_level）；None = 服務預設。"""
         tag = tag or {}
+        params = params or self.params
         result: StructuredResult[M] = StructuredResult(value=None)
         current = request
         for attempt in range(self.validation_retries + 1):
-            key = cache_key(self.provider.name, current, self.params)
+            key = cache_key(self.provider.name, current, params)
             base = dict(
                 timestamp=datetime.now(timezone.utc).isoformat(),
                 tag=tag,
                 provider=self.provider.name,
-                model=self.params.model,
-                params=self.params.as_dict(),
+                model=params.model,
+                params=params.as_dict(),
                 prompt_name=current.prompt_name,
                 prompt_version=current.prompt_version,
                 cache_key=key,
@@ -192,7 +201,7 @@ class LLMService:
             t0 = time.monotonic()
             try:
                 raw = call_with_retry(
-                    lambda: self.provider.generate(current, self.params), self.retry, outcome, sleep=self._sleep
+                    lambda: self.provider.generate(current, params), self.retry, outcome, sleep=self._sleep
                 )
             except LLMError as e:
                 msg = f"{type(e).__name__}: {e}"
@@ -232,7 +241,7 @@ class LLMService:
             order = key_order_issues(json.loads(raw.text), current.response_schema)
             self._emit(LLMCallRecord(**base, cache_hit=False, ok=True, key_order_issues=order, **usage_fields), result)
             self.cache.put(
-                key, provider=self.provider.name, request=current, params=self.params,
+                key, provider=self.provider.name, request=current, params=params,
                 text=raw.text, usage=raw.usage, latency_s=latency, model_version=raw.model_version,
             )
             result.value = value

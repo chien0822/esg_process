@@ -81,6 +81,8 @@ class AccountImpact(ZhModel, Generic[AccountT]):
     evidence_grade: Literal[EVIDENCE_GRADES] = zh("證據等級")
     stage: Literal[OCCURRENCE_STAGES] = zh("發生階段")
     explanation: NonBlankStr = zh("傳導說明")
+    # 原文依據為 null 時必填（SPEC 9.4、17.12）；跨欄位關係由 S6 標記，pydantic 不擋
+    inference_premise: str | None = zh("推論前提")
     basis_quote: str | None = zh("原文依據")
     alternatives: list[Literal[ALL_ACCOUNT_NAMES]] = zh("替代科目")
 
@@ -98,14 +100,23 @@ class AffectedAccounts(ZhModel):
     income_statement: list[IncomeStatementImpact] = zh("綜合損益表")
 
 
-class P2Result(ZhModel):
-    code: str = zh("代碼")
+class P2Draft(ZhModel):
+    """送給 LLM 的 schema（不含代碼；代碼由程式填入，SPEC 17.12 實作補充）。"""
+
     understanding: Understanding = zh("理解紀錄")
     channels: list[Channel] = zh("傳導管道")
     overall: Literal[OVERALL_JUDGEMENTS] = zh("整體判斷")
     no_impact_reason: Literal[NO_IMPACT_REASONS] | None = zh("無影響理由類型")
     rationale: str = zh("判斷理由")
     accounts: AffectedAccounts = zh("潛在受影響會計科目")
+
+
+class _P2Id(ZhModel):
+    code: str = zh("代碼")
+
+
+class P2Result(P2Draft, _P2Id):
+    """05_p2/<代碼>.json。欄位順序：代碼在前，其餘同 P2Draft（SPEC 9.4）。"""
 
 
 class LLMAttempt(ZhModel):

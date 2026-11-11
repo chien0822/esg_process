@@ -74,6 +74,11 @@ class ExtractSettings(StrictModel):
     input_mode: Literal["text", "text+pdf"] = "text+pdf"
 
 
+class ReasonSettings(StrictModel):
+    # S5 P2 推理的 thinking level（SPEC 17.12 實作補充）；其他階段用 llm.thinking_level
+    thinking_level: Literal["low", "medium", "high"] = "medium"
+
+
 class CheckSettings(StrictModel):
     citation_page_buffer: int = Field(1, ge=0)
     fuzzy_pass_ratio: float = Field(0.9, ge=0, le=1)  # 模糊通過門檻，M5 再定
@@ -102,6 +107,7 @@ class Settings(StrictModel):
     parse: ParseSettings = Field(default_factory=ParseSettings)
     locate: LocateSettings = Field(default_factory=LocateSettings)
     extract: ExtractSettings = Field(default_factory=ExtractSettings)
+    reason: ReasonSettings = Field(default_factory=ReasonSettings)
     check: CheckSettings = Field(default_factory=CheckSettings)
     context_card: ContextCardSettings = Field(default_factory=ContextCardSettings)
     site: SiteSettings = Field(default_factory=SiteSettings)

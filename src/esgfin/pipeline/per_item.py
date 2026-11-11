@@ -39,8 +39,12 @@ def run_per_item(
     reason_item: ReasonItemFn,
     *,
     on_progress: Callable[[str], None] | None = None,
+    only: set[str] | None = None,
 ) -> PerItemOutcome:
+    """only：只處理這些條目代碼（--items 試跑）；None = 全部。"""
     items = read_model(ctx.report_dir / "03_p1_items.json", P1Items).items
+    if only is not None:
+        items = [it for it in items if it.code in only]
     out = PerItemOutcome(total=len(items))
     override_dir = ctx.paths.override_dir(ctx.report_id) / P2_DIR
     for item in items:

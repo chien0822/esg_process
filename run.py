@@ -8,6 +8,7 @@
   uv run python run.py --serve-only                       不跑流程，只用最新結果開網頁
   uv run python run.py --strict ...                       正式實驗：有未提交修改或 commit 改變就拒絕執行
   uv run python run.py --input-mode text ...              覆寫 extract.input_mode（S3a 的 text / text+pdf 比較）
+  uv run python run.py --from-stage reason --items 代碼,代碼  試跑：S5 只跑指定條目，S6 之後不執行
 """
 
 from __future__ import annotations
@@ -37,10 +38,16 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p.add_argument("--serve-only", action="store_true", help="不跑流程，只用最新結果開網頁")
     p.add_argument("--strict", action="store_true", help="正式實驗：有未提交修改，或 commit 與 run 開始時不同，就拒絕執行")
     p.add_argument("--input-mode", choices=["text", "text+pdf"], help="覆寫 settings.yaml 的 extract.input_mode（S3a 表格重建）")
+    p.add_argument("--items", metavar="代碼,代碼", help="試跑：S5 只跑指定的條目代碼（逗號分隔），S6 之後不執行")
     args = p.parse_args(argv)
+    args.items = [c.strip() for c in args.items.split(",") if c.strip()] if args.items else None
 
     if args.serve_only and (args.report or args.resume or args.from_stage or args.source or args.no_serve or args.strict):
         p.error("--serve-only 不能與其他選項同時使用")
+    if args.items is not None and not args.items:
+        p.error("--items 至少要有一個條目代碼")
+    if args.items and (args.resume or args.serve_only):
+        p.error("--items 不能與 --resume／--serve-only 同時使用")
     if args.input_mode and (args.resume or args.serve_only):
         p.error("--input-mode 不能與 --resume／--serve-only 同時使用")
     if args.resume and (args.from_stage or args.source):
@@ -68,6 +75,7 @@ def main(argv: list[str] | None = None) -> int:
                     source=args.source,
                     strict=args.strict,
                     input_mode=args.input_mode,
+                    items=args.items,
                 )
             )
         except RunSetupError as e:

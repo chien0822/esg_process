@@ -47,6 +47,9 @@ locate:
 extract:
   input_mode: text+pdf          # text / text+pdf；作用於 S3a 表格重建（SPEC 7.6），S3 一律只吃重建表文字
 
+reason:
+  thinking_level: medium        # S5 P2 推理專用（low / medium / high）；其他階段用 llm.thinking_level
+
 check:
   citation_page_buffer: 1       # 引文驗證比對頁的前後緩衝
   fuzzy_pass_ratio: 0.9         # 模糊通過門檻【M5 再定】
@@ -64,4 +67,5 @@ prompts:                        # 名稱: 版本 → prompts/<名稱>_v<版本>.
   s2_index: 1
   s3a_table: 1
   s3_extract: 4                 # v4：描述事件的欄（含標題、短名稱欄）皆對應事件描述，未使用只用於無關的欄；v3：同義詞表命中即填原文；v2：等級整欄判斷
+  p2_reasoning: 1
   ref_tcfd_examples: 1          # S3 的 TCFD 例句參考檔（不是提示，但同樣記錄版本與雜湊）
