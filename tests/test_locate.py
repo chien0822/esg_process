@@ -150,7 +150,11 @@ def test_manifest_end_to_end(locate_project, make_runner):
     assert any(isinstance(p, DocumentPart) for p in toc_call.parts)
     strategy_call = next(c for c in llm.calls if c.prompt_name == "s2_strategy")
     assert "PDF 第 9 頁" not in strategy_call.parts[0].text  # p.9 只有導覽列與「能源管理」
-    assert rec.reports[REALTEK].stages["locate"].llm_calls == 4
+    # 判定頁 7–8 的前後頁 6、9 不在候選名單，追加一次判斷（皆判為否）
+    strategy_calls = [c for c in llm.calls if c.prompt_name == "s2_strategy"]
+    assert len(strategy_calls) == 2
+    assert "PDF 第 6 頁" in strategy_calls[1].parts[0].text and "PDF 第 9 頁" in strategy_calls[1].parts[0].text
+    assert rec.reports[REALTEK].stages["locate"].llm_calls == 5
 
 
 def test_no_strategy_table_stops_report(locate_project, make_runner):
@@ -265,3 +269,20 @@ def test_title_dot_strip_keeps_section_numbers():
     assert normalize(strip("2.1 .公司治理")) == normalize("2.1 公司治理")
     for title in ("1.1 關於廣達", "3.1.2 氣候承諾與行動", "3 永續環境", "CH3 綠色營運"):
         assert strip(title) == title
+
+
+def test_neighbor_page_without_keywords_joins_table(locate_project, make_runner):
+    """跨頁表的第一頁關鍵字不足、未入選候選，但緊鄰判定頁，追加判斷為是後併入。"""
+    def table_6_to_8(request):
+        res = strategy_responder(request)
+        for j in res["判斷"]:
+            j["是否為策略表"] = j["PDF頁序"] in (6, 7, 8)
+        return res
+
+    llm = locate_llm(strategy=table_6_to_8)
+    rec, rdir = run_one(locate_project, make_runner, llm)
+    m = read_model(rdir / "02_manifest.json", Manifest)
+    assert [t.pdf_pages for t in m.strategy_tables] == [[6, 7, 8]]
+    # 第 3 次：p.5（6 的前一頁）；p.9 已在第 2 次判為否，不重送
+    calls = [c.parts[0].text for c in llm.calls if c.prompt_name == "s2_strategy"]
+    assert len(calls) == 3 and "PDF 第 5 頁" in calls[2] and "PDF 第 9 頁" not in calls[2]

@@ -78,6 +78,11 @@ def report_section(rid: str, run_dir: Path, settings: dict) -> list[str]:
         j = judged.get(n)
         verdict = "—" if j is None else ("是" if j["is_strategy_table"] else "否")
         out.append(f"| {n} | {len(hits[n])} | {'、'.join(hits[n])} | {'是' if n in sent else '**否（超過上限）**'} | {verdict} |")
+    nb = sc.get("neighbor_pages", [])
+    if nb:
+        out.append("\n策略表前後頁追加判斷：" + "、".join(f"p.{n}（{'是' if judged.get(n, {}).get('is_strategy_table') else '否'}）" for n in nb))
+    else:
+        out.append("\n策略表前後頁追加判斷：無（前後頁皆已在候選名單中）")
     if sc.get("index_fallback_pages"):
         out.append(f"\n索引退路候選頁：{sc['index_fallback_pages']}")
     out += ["", f"因上限被排除的頁：{'、'.join(f'p.{n}（{len(hits[n])}）' for n in dropped) if dropped else '無'}"]

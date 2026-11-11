@@ -128,6 +128,25 @@ def _judge_strategy(ctx: ReportContext, candidates: list[int], body: dict[int, s
     return {j.pdf_page: (j.is_strategy_table, j.evidence) for j in result.pages if j.pdf_page in candidates}
 
 
+def _expand_neighbors(ctx: ReportContext, judged: dict[int, tuple[bool, str | None]], body: dict[int, str]) -> list[int]:
+    """判為策略表的頁，前後各 1 頁若尚未判斷過，也送 LLM 判斷（跨頁表的頭尾可能關鍵字不足而未入選）。
+
+    新判為是的頁同樣檢查其前後頁，直到沒有新頁為止。回傳額外送出的頁。
+    """
+    extra: list[int] = []
+    while True:
+        new = sorted(
+            {n + d for n, (ok, _) in judged.items() if ok for d in (-1, 1)} - set(judged)
+        )
+        new = [n for n in new if n in body]
+        if not new:
+            return extra
+        judged.update(_judge_strategy(ctx, new, body))
+        for n in new:  # LLM 漏回的頁視為否，避免無限重送
+            judged.setdefault(n, (False, None))
+        extra += new
+
+
 def _group_tables(judged: dict[int, tuple[bool, str | None]], found_by: str, sections: list[Section]) -> list[StrategyTable]:
     pages = sorted(n for n, (ok, _) in judged.items() if ok)
     groups: list[list[int]] = []
@@ -265,6 +284,7 @@ def run_locate(ctx: ReportContext) -> None:
             f"排除：{dropped}（括號內為關鍵字數）"
         )
     judged = _judge_strategy(ctx, candidates, body)
+    neighbors = _expand_neighbors(ctx, judged, body)
     tables = _group_tables(judged, "keyword+llm", sections)
 
     # 第 7 步
@@ -279,6 +299,7 @@ def run_locate(ctx: ReportContext) -> None:
         fallback = sorted({p + d for p in pointed for d in range(-s.section_page_buffer, s.section_page_buffer + 1) if 1 <= p + d <= layout.page_count})
         fallback = fallback[: s.max_strategy_candidates]
         judged_fb = _judge_strategy(ctx, fallback, body)
+        neighbors += _expand_neighbors(ctx, judged_fb, body)
         tables = _group_tables(judged_fb, "index_fallback", sections)
         judged.update(judged_fb)
 
@@ -308,6 +329,7 @@ def run_locate(ctx: ReportContext) -> None:
         "keyword_hits": {n: h for n, h in scores.items() if h},
         "sent_to_llm": candidates,
         "index_fallback_pages": fallback,
+        "neighbor_pages": neighbors,  # 判定頁前後各 1 頁的追加判斷
         "llm_judgement": {n: {"is_strategy_table": ok, "evidence": ev} for n, (ok, ev) in sorted(judged.items())},
     }
     debug["index_pages"] = index_pages
