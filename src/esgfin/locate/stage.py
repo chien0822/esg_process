@@ -24,7 +24,7 @@ from esgfin.schemas.pages import PageRecord
 from esgfin.textnorm import normalize
 
 from . import toc as T
-from .layout import Layout, analyze, page_offset, strip_nav
+from .layout import Layout, analyze, page_offset, repeated_lines, strip_nav
 
 ROLE_ENV = "環境"
 ROLE_INDEX = "索引附錄"
@@ -111,8 +111,8 @@ def _classify_roles(ctx: ReportContext, sections: list[Section]) -> None:
 # ---------------------------------------------------------------- 第 6 步
 
 
-def _body_text(pages: dict[int, PageRecord], layout: Layout) -> dict[int, str]:
-    return {n: strip_nav(p.text_md, layout.nav_tokens)[0] for n, p in pages.items()}
+def _body_text(pages: dict[int, PageRecord], layout: Layout, repeated: set[str]) -> dict[int, str]:
+    return {n: strip_nav(p.text_md, layout.nav_tokens, repeated)[0] for n, p in pages.items()}
 
 
 def _keyword_hits(text: str) -> list[str]:
@@ -187,8 +187,7 @@ def _cross_check(ctx, index_pages, body, offset, sections, located: set[int]) ->
         if pdf_pages:
             inside = all(p in located for p in pdf_pages)
         else:
-            target = normalize(item.points_to)
-            secs = [s for s in sections if normalize(s.title) and normalize(s.title) in target]
+            secs = T.sections_pointed(item.points_to, sections)
             inside = None if not secs else any(s.role == ROLE_ENV for s in secs)
         checks.append(IndexCrossCheck(index_item=item.index_item, points_to=item.points_to, inside_located_range=inside))
     return checks, sorted(set(pointed))
@@ -254,12 +253,17 @@ def run_locate(ctx: ReportContext) -> None:
         warnings.append("沒有任何章節被分類為環境，無法在環境章節內找策略表")
 
     # 第 6 步
-    body = _body_text(pages, layout)
+    repeated = repeated_lines([p.text_md for p in pages.values()], s.nav_min_pages)
+    body = _body_text(pages, layout, repeated)
     scores = {n: _keyword_hits(body[n]) for n in sorted(env_pages) if n in body}
     ranked = sorted((n for n, h in scores.items() if len(h) >= s.min_keyword_hits), key=lambda n: (-len(scores[n]), n))
     candidates = sorted(ranked[: s.max_strategy_candidates])
     if len(ranked) > len(candidates):
-        warnings.append(f"策略表候選頁 {len(ranked)} 頁，超過上限 {s.max_strategy_candidates}，只送關鍵字最多的頁")
+        dropped = "、".join(f"p.{n}（{len(scores[n])}）" for n in ranked[s.max_strategy_candidates :])
+        warnings.append(
+            f"策略表候選頁 {len(ranked)} 頁，超過上限 {s.max_strategy_candidates}；依關鍵字數取前 {s.max_strategy_candidates} 頁，"
+            f"排除：{dropped}（括號內為關鍵字數）"
+        )
     judged = _judge_strategy(ctx, candidates, body)
     tables = _group_tables(judged, "keyword+llm", sections)
 
@@ -298,7 +302,7 @@ def run_locate(ctx: ReportContext) -> None:
     )
     write_model(ctx.report_dir / "02_manifest.json", manifest)
 
-    debug.update(_layout_debug(layout, nav, pages))
+    debug.update(_layout_debug(layout, nav, pages, repeated))
     debug["strategy_candidates"] = {
         "environment_pages": sorted(env_pages),
         "keyword_hits": {n: h for n, h in scores.items() if h},
@@ -310,14 +314,15 @@ def run_locate(ctx: ReportContext) -> None:
     write_json(ctx.report_dir / "02_locate_debug.json", debug)
 
 
-def _layout_debug(layout: Layout, nav: dict, pages: dict[int, PageRecord]) -> dict:
-    removed_by_page = {n: strip_nav(p.text_md, layout.nav_tokens)[1] for n, p in pages.items()}
+def _layout_debug(layout: Layout, nav: dict, pages: dict[int, PageRecord], repeated: set[str]) -> dict:
+    removed_by_page = {n: strip_nav(p.text_md, layout.nav_tokens, repeated)[1] for n, p in pages.items()}
     line_counts = Counter(line for lines in removed_by_page.values() for line in lines)
     return {
         "printed_page_numbers": {n: v for n, v in layout.printed_numbers.items()},
         "nav_tokens": sorted(layout.nav_tokens),
         "current_nav_by_color": {"pages": len(layout.current_nav), "used": bool(nav), "ranges": nav},
-        "docling_nav_lines": {
+        "repeated_lines": sorted(repeated),
+        "docling_nav_lines": {  # 依導覽列詞或多頁重複而移除的行
             "pages_with_nav_lines": sorted(n for n, lines in removed_by_page.items() if lines),
             "most_common_lines": line_counts.most_common(15),
         },

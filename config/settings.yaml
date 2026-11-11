@@ -20,9 +20,12 @@ retry:                          # 429、5xx、連線錯誤的指數退避
   max_backoff_s: 60
   jitter: true
 
-pricing:                        # 只用於估算花費；請依官方價目表填寫（美元／百萬 token）
-  input_usd_per_million_tokens: null
-  output_usd_per_million_tokens: null
+pricing:                        # 只用於估算花費（美元／百萬 token）；不影響結果
+  # 來源：https://aistudio.google.com/docs/pricing（原 https://ai.google.dev/gemini-api/docs/pricing 轉址）
+  # 查詢日期：2026-11-10；Gemini 3.8 Flash，付費 Standard tier
+  # 此價格適用至 2026-12-31；2027-01-01 起輸入 1.50、輸出 7.50，屆時請更新
+  input_usd_per_million_tokens: 0.75
+  output_usd_per_million_tokens: 3.75   # 含 thinking token
 
 parse:
   parser: docling               # docling / pymupdf4llm【已決定 10/29：Docling】

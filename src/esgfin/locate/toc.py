@@ -22,6 +22,9 @@ from esgfin.textnorm import normalize
 from .layout import Layout
 
 _CODE_LIKE = re.compile(r"^[A-Za-z]{0,3}\s*\d+(\.\d+)*$")  # 「ch1」「1.1」：只有編號、沒有標題
+_SECTION_NUMBER = re.compile(r"^\s*(\d+(?:\.\d+)*)")
+# 編號後多餘的點：「2.1 .公司治理」（廣達目錄文字層原文如此）
+_DOT_AFTER_NUMBER = re.compile(r"^(\s*\d+(?:\.\d+)*)\s*[.．、]\s*")
 _NUMBER = re.compile(r"(?<!\d)\d{1,3}(?!\d)")
 # 目錄的頁碼行：整行只有 1–3 位數字，或以點線接頁碼結尾（「1.1 關於廣達. . . .09」）
 _PAGE_NUMBER_LINE = re.compile(r"^\d{1,3}$|([.．…·]\s*){3,}\d{1,3}$")
@@ -214,10 +217,24 @@ def check_titles(entries: list[TocEntry], layout: Layout, buffer: int) -> None:
     for e in entries:
         if e.pdf_page is None:
             continue
-        t = normalize(e.title)
+        t = normalize(_DOT_AFTER_NUMBER.sub(r"\1 ", e.title))
         pages = range(max(1, e.pdf_page - buffer), min(layout.page_count, e.pdf_page + buffer) + 1)
         if t and not any(t in normalize(layout.pages[n].text) for n in pages):
             e.flags.append(FLAG_TITLE_NOT_FOUND)
+
+
+def section_number(title: str) -> str | None:
+    m = _SECTION_NUMBER.match(title)
+    return m.group(1) if m else None
+
+
+def sections_pointed(points_to: str, sections: list) -> list:
+    """索引「指向」所指的章節：以章節編號比對（「3.1.2」），否則以標題比對（「詳見CH3 綠色營運」）。"""
+    target = normalize(points_to)
+    number = section_number(points_to)
+    if number is not None and normalize(points_to) == number:
+        return [s for s in sections if section_number(s.title) == number]
+    return [s for s in sections if normalize(s.title) and normalize(s.title) in target]
 
 
 def buffered(start: int, end: int, buffer: int, page_count: int) -> tuple[int, int]:

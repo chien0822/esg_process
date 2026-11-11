@@ -140,11 +140,31 @@ def is_nav_line(line: str, nav_tokens: set[str]) -> bool:
     return bool(toks) and all(t in nav_tokens for t in toks)
 
 
-def strip_nav(text_md: str, nav_tokens: set[str]) -> tuple[str, list[str]]:
-    """移除整行為導覽列的行（表格列不動）。回傳（剩下的文字, 被移除的行）。"""
+_LINE_MARKER = re.compile(r"^\s*(#+|[-*•])\s*")
+
+
+def line_key(line: str) -> str:
+    """去掉 Markdown 標題與清單符號後正規化，用於比對重複行。"""
+    return normalize(_LINE_MARKER.sub("", line))
+
+
+def repeated_lines(texts: list[str], min_pages: int) -> set[str]:
+    """在至少 min_pages 頁出現的非表格行（例如廣達側邊欄的「3.1.1 氣候變遷管理」）。
+
+    以位置找導覽列時，側邊欄文字若超出邊緣範圍就抓不到；這裡改以「多頁重複」補足。
+    """
+    pages_per_line: Counter = Counter()
+    for text in texts:
+        keys = {line_key(line) for line in text.splitlines() if line.strip() and not line.lstrip().startswith("|")}
+        pages_per_line.update(k for k in keys if k)
+    return {k for k, c in pages_per_line.items() if c >= min_pages}
+
+
+def strip_nav(text_md: str, nav_tokens: set[str], repeated: set[str] = frozenset()) -> tuple[str, list[str]]:
+    """移除整行為導覽列或多頁重複的行（表格列不動）。回傳（剩下的文字, 被移除的行）。"""
     kept, removed = [], []
     for line in text_md.splitlines():
-        if not line.lstrip().startswith("|") and is_nav_line(line, nav_tokens):
+        if not line.lstrip().startswith("|") and (is_nav_line(line, nav_tokens) or (line.strip() and line_key(line) in repeated)):
             removed.append(line.strip())
         else:
             kept.append(line)

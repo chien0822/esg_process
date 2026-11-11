@@ -229,3 +229,30 @@ def test_sub_pdf_bytes_are_deterministic(tmp_path):
     first = _pdf_bytes(pdf, [2])
     time.sleep(1.1)
     assert _pdf_bytes(pdf, [2]) == first
+
+
+def test_repeated_lines_removed_even_outside_margin():
+    """廣達側邊欄「3.1.1 氣候變遷管理」超出邊緣範圍，仍以多頁重複移除；表格列不動。"""
+    from esgfin.locate.layout import repeated_lines
+
+    side = "- 3.1.1 氣候變遷管理\n- 3.1.2 氣候承諾與行動\n"
+    texts = [side + f"內文第 {i} 頁" for i in range(6)] + ["| 3.1.1 氣候變遷管理 | 表格 |\n氣候風險與機會"]
+    rep = repeated_lines(texts, 5)
+    body, removed = strip_nav(texts[-1] + "\n" + side, set(), rep)
+    assert removed == ["- 3.1.1 氣候變遷管理", "- 3.1.2 氣候承諾與行動"]
+    assert "| 3.1.1 氣候變遷管理 | 表格 |" in body and "氣候風險與機會" in body
+
+
+def test_index_points_to_section_number_and_title_dot():
+    from types import SimpleNamespace
+
+    from esgfin.locate.toc import check_titles, sections_pointed
+
+    secs = [SimpleNamespace(title="3.1.2 氣候承諾與行動"), SimpleNamespace(title="3.1 氣候行動"), SimpleNamespace(title="CH3 綠色營運")]
+    assert [s.title for s in sections_pointed("3.1.2", secs)] == ["3.1.2 氣候承諾與行動"]
+    assert [s.title for s in sections_pointed("詳見CH3 綠色營運", secs)] == ["CH3 綠色營運"]
+
+    layout = SimpleNamespace(page_count=3, pages={n: SimpleNamespace(text="2.1 公司治理\n董事會") for n in (1, 2, 3)})
+    e = TocEntry("2.1 .公司治理", 2, "2.1 .公司治理. . . .33", pdf_page=2)
+    check_titles([e], layout, 1)
+    assert e.flags == [] and e.title == "2.1 .公司治理"  # manifest 標題保留原文
