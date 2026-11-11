@@ -1,0 +1,19 @@
+# 策略表預期欄位對應（SPEC 7.5，2026-11-12）。只供 eval_tables.py 評估 S3 的 column_mapping，不用於執行時檢查。
+# 欄序從 1 起算，對應 03a_tables.json 的 header；原表欄位只供辨識，計分只比對欄序與對應欄位。
+report_id,欄序,原表欄位,對應欄位
+realtek_2024_ESG,1,氣候風險與機會,類型
+realtek_2024_ESG,2,氣候風險與機會,子類別
+realtek_2024_ESG,3,氣候影響事件,事件描述
+realtek_2024_ESG,4,潛在財務影響,顯示財務Impact
+realtek_2024_ESG,5,因應策略,因應措施備註
+Quanta_2024_ESG,1,風險類別,類型
+Quanta_2024_ESG,2,子類別,子類別
+Quanta_2024_ESG,3,風險項目,事件描述
+Quanta_2024_ESG,4,內容,事件描述
+Quanta_2024_ESG,5,發生可能性,發生可能性
+Quanta_2024_ESG,6,發生時間,影響時間
+Quanta_2024_ESG,7,衝擊強度,衝擊強度
+Quanta_2024_ESG,8,衝擊範圍,影響範圍
+Quanta_2024_ESG,9,潛在財務影響,顯示財務Impact
+Quanta_2024_ESG,10,機會項目,未使用
+Quanta_2024_ESG,11,減緩與調適計劃,因應措施備註
