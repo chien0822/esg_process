@@ -98,7 +98,9 @@ class StageRegistry:
 
     @classmethod
     def production(cls) -> "StageRegistry":
+        from esgfin.aggregate.stage import run_aggregate
         from esgfin.check.p1check import run_p1check
+        from esgfin.check.p2check import run_p2check
         from esgfin.extract.stage import run_extract
         from esgfin.locate.stage import run_locate
         from esgfin.parse.stage import run_parse
@@ -114,8 +116,8 @@ class StageRegistry:
                 "tables": run_tables,
                 "extract": run_extract,
                 "p1check": run_p1check,
-                "check": _not_implemented("S6", "檢查模組", "M5"),
-                "aggregate": _not_implemented("S7", "彙整", "M5"),
+                "check": run_p2check,
+                "aggregate": run_aggregate,
             },
             reason_item=reason_item,
             build_site=build_site,
@@ -282,6 +284,7 @@ class Runner:
             missing = "、".join(sorted(self._items - self._items_found))
             raise RunSetupError(f"--items 指定的條目不在 P1 結果中：{missing}（run {recorder.record.run_id}）")
 
+        self._write_run_metrics(recorder)
         if opts.build_site and self.registry.build_site is not None:
             self._build_site(recorder, settings)
 
@@ -651,6 +654,18 @@ class Runner:
                 REPORT_STATUS_NO_TABLE,
                 f"未找到氣候策略表。可在 overrides/{ctx.report_id}/02_manifest.json 手動指定策略表頁碼",
             )
+
+    def _write_run_metrics(self, recorder: RunRecorder) -> None:
+        """runs/<run_id>/metrics.json：本 run 各報告書 07_metrics.json 的合併計數（SPEC 17.6 第 2 點）。"""
+        from esgfin.aggregate.stage import write_run_metrics
+
+        try:
+            out = write_run_metrics(self.paths, recorder.record.run_id, list(recorder.record.reports))
+        except Exception as e:  # 總計失敗不影響各報告書結果
+            self.console.print(f"\n[red]總計指標產生失敗：{type(e).__name__}: {e}[/red]")
+            return
+        if out is not None:
+            self.console.print(f"\n總計指標：{out.relative_to(self.paths.root)}")
 
     # ---------------------------------------------------------------- S8
 

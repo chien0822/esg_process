@@ -1,6 +1,6 @@
 """S8：由各報告書最新一次成功的 07_final.json 產生 site/index.html（SPEC 12）。
 
-M0 只完成「選哪個 run 的結果」與基本版面；投資人版的完整格式在 M5 完成。
+版面依 SPEC 12：儲存格格式 12.2、視覺 12.3、方向圖例 12.4（文字照 SPEC 原文）、null 顯示「—」、頁尾免責聲明。
 """
 
 from __future__ import annotations
@@ -94,6 +94,27 @@ def collect_latest(paths: ProjectPaths) -> list[ReportView]:
     return views
 
 
+NULL_TEXT = "—"
+
+# SPEC 12.4 方向圖例【已決定 2026-11-12】，原文照用，不得改寫
+DIRECTION_LEGEND: tuple[str, ...] = (
+    "所有方向都是與這個事件沒發生相比的推估，不是與去年相比，也不代表金額大小。科目排序依影響的直接程度與證據強度排列，同樣不代表金額大小。",
+    "資產負債表：上升＝該科目在報導日的帳面金額較高；下降＝較低。資產上升不一定是好事（例如為因應風險增加的設備投資），負債上升表示公司未來要付出的義務增加。",
+    "綜合損益表：營業收入上升＝收入增加；費用科目（營業成本、研發費用、推銷及管理費用、利息費用）上升＝費用增加，會使獲利減少；損益科目（資產減損及處分損益、投資類損益、停業單位損益）上升＝利益增加或損失減少，下降＝損失增加或利益減少。",
+    "不確定＝找得到影響路徑，但依報告書內容無法判斷金額變大或變小。",
+)
+
+
+def show(v) -> str:
+    """null 或空字串顯示為「—」（SPEC 12.1）。"""
+    return NULL_TEXT if v is None or (isinstance(v, str) and not v.strip()) else str(v)
+
+
+def type_text(item: FinalItem) -> str:
+    """類型與子類別，例如「轉型風險／政策與法規」；子類別 null 時顯示「轉型風險／—」。"""
+    return f"{item.item_type}／{show(item.subcategory)}"
+
+
 def accounts_lines(item: FinalItem) -> list[str]:
     """「潛在受影響會計科目」儲存格的各行（SPEC 12.2）。"""
     if item.reasoning_status in (REASONING_FAILED, REASONING_CHECK_FAILED):
@@ -110,8 +131,8 @@ def accounts_lines(item: FinalItem) -> list[str]:
 
 def build_site(paths: ProjectPaths, settings: Settings) -> Path:
     env = Environment(loader=FileSystemLoader(TEMPLATES), autoescape=select_autoescape(["html", "j2"]))
-    env.globals["accounts_lines"] = accounts_lines
-    html = env.get_template("index.html.j2").render(views=collect_latest(paths), ok=REPORT_STATUS_OK)
+    env.globals.update(accounts_lines=accounts_lines, show=show, type_text=type_text)
+    html = env.get_template("index.html.j2").render(views=collect_latest(paths), ok=REPORT_STATUS_OK, legend=DIRECTION_LEGEND)
     out = paths.site_dir / "index.html"
     atomic_write_text(out, html)
     return out

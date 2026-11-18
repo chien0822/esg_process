@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import model_validator
+from pydantic import model_serializer, model_validator
 
 from esgfin.constants import (
     DIRECTION_NONE,
@@ -25,6 +25,11 @@ class TopAccounts(ZhModel):
 
     balance_sheet: list[BalanceSheetImpact] | None = zh("資產負債表", default=None)
     income_statement: list[IncomeStatementImpact] | None = zh("綜合損益表", default=None)
+
+    @model_serializer(mode="wrap")
+    def _drop_empty(self, handler):
+        """空的表不輸出（SPEC 11.1），其餘欄位的 null 照常輸出。"""
+        return {k: v for k, v in handler(self).items() if v is not None}
 
 
 class FinalItem(P1Item):
@@ -70,9 +75,20 @@ class Ratio(ZhModel):
 
 
 class CitationStats(ZhModel):
+    """null 的引文不驗證、不計入（SPEC 11.2、17.12 C-2）。通過率＝（完全＋模糊）÷ 驗證總數；兩個比例由計數重算。"""
+
     exact: int = zh("完全通過", default=0)
     fuzzy: int = zh("模糊通過", default=0)
     failed: int = zh("未通過", default=0)
+    pass_rate: Ratio | None = zh("通過率", default=None)
+    exact_rate: Ratio | None = zh("完全通過率", default=None)
+
+    @model_validator(mode="after")
+    def _rates(self) -> "CitationStats":
+        total = self.exact + self.fuzzy + self.failed
+        self.pass_rate = Ratio(numerator=self.exact + self.fuzzy, denominator=total)
+        self.exact_rate = Ratio(numerator=self.exact, denominator=total)
+        return self
 
     @classmethod
     def pooled(cls, stats: list["CitationStats"]) -> "CitationStats":
@@ -104,8 +120,12 @@ class Metrics(ZhModel):
     gap_type_counts: dict[str, int] = zh("缺口類型分布", default_factory=dict)
     certainty_all: Ratio = zh("確定比例_全部排序科目", default_factory=Ratio)
     certainty_top: Ratio = zh("確定比例_前三顯示科目", default_factory=Ratio)
+    # 分母＝「有影響」條目的全部排序科目數；分子＝其中證據等級 C 且原文依據為 null（SPEC 11.2、17.12）
+    grade_c_null_quote: Ratio = zh("證據等級C且原文依據null比例", default_factory=Ratio)
     citation_p1: CitationStats = zh("引文驗證_P1", default_factory=CitationStats)
     citation_p2: CitationStats = zh("引文驗證_P2", default_factory=CitationStats)
+    # 分母＝structured 請求數（快取命中也算，快取只存通過驗證的回應）；分子＝首次回應即通過驗證
     json_first_pass: Ratio = zh("JSON首次通過率", default_factory=Ratio)
-    retries: int = zh("重試次數", default=0)
+    retries: int = zh("重試次數", default=0)  # 驗證未通過、附錯誤重問的次數
+    transient_retries: int = zh("連線重試次數", default=0)  # 429、5xx、連線錯誤的退避重試
     stages: dict[str, StageUsage] = zh("階段耗時與token", default_factory=dict)

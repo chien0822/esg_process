@@ -154,7 +154,7 @@ DIRECTIONS_CERTAIN: tuple[str, ...] = (DIRECTION_UP, DIRECTION_DOWN)  # 確定�
 
 DIRECTNESS_LEVELS: tuple[str, ...] = ("一", "二", "三")
 EVIDENCE_GRADES: tuple[str, ...] = ("A", "B", "C")
-# 【待確認 15-4】證據等級 C 是否允許原文依據為 null；目前允許
+# 證據等級 A、B 必須有原文依據；C 可為 null（此時須有推論前提）【已決定 2026-11-12，SPEC 17.12 B】
 EVIDENCE_GRADES_REQUIRING_QUOTE: tuple[str, ...] = ("A", "B")
 
 # 推理狀態（07_final.json）
