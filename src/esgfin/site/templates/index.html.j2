@@ -75,10 +75,8 @@
     <ul>{% for line in legend %}<li>{{ line }}</li>{% endfor %}</ul>
   </div>
   <div class="legend">
-    <h3>欄位標示</h3>
-    <p>{{ field_tag_note }}</p>
     <h3>證據等級</h3>
-    <p>{{ evidence_grade_note }}</p>
+    <ul>{% for line in grade_legend %}<li>{{ line }}</li>{% endfor %}</ul>
   </div>
   <div class="table-wrap">
   <table>

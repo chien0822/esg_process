@@ -1,7 +1,7 @@
 """S8：由各報告書最新一次成功的 07_final.json 產生 site/index.html（SPEC 12）。
 
-版面依 SPEC 12：儲存格格式 12.2、視覺 12.3、方向圖例 12.4（文字照 SPEC 原文）、null 顯示「—」、頁尾免責聲明。
-欄位、等級欄顯示規則、推理說明展開區、說明區另兩段依 SPEC 17.13（2026-11-19），與 12.1 衝突時以 17.13 為準。
+版面依 SPEC 12：儲存格格式 12.2、視覺 12.3、null 顯示「—」、頁尾免責聲明。
+欄位、等級欄顯示規則、推理說明展開區、說明區（方向圖例、證據等級）依 SPEC 17.13（2026-11-19），與 12.1、12.4 衝突時以 17.13 為準。
 只改顯示，不改 07_final.json 內容。
 """
 
@@ -99,22 +99,21 @@ def collect_latest(paths: ProjectPaths) -> list[ReportView]:
 
 
 NULL_TEXT = "—"
-NOT_PROVIDED = "報告書未提供"  # SPEC 17.13：等級欄、公司揭露的財務影響為 null 時
 TAG_RAW = "（原文）"
-TAG_AI = "（AI 推論）"
 WHERE_NOT_MENTIONED = "未提及"  # P2 提示：原文沒有提到時「內容」寫「未提及」（prompts/p2_reasoning_v1.md）
 
-# SPEC 12.4 方向圖例【已決定 2026-11-12】，原文照用，不得改寫
+# 說明區（SPEC 17.13 第 4 點，2026-11-19 使用者修訂；取代 12.4 的文字），原文照用，不得改寫
 DIRECTION_LEGEND: tuple[str, ...] = (
-    "所有方向都是與這個事件沒發生相比的推估，不是與去年相比，也不代表金額大小。科目排序依影響的直接程度與證據強度排列，同樣不代表金額大小。",
-    "資產負債表：上升＝該科目在報導日的帳面金額較高；下降＝較低。資產上升不一定是好事（例如為因應風險增加的設備投資），負債上升表示公司未來要付出的義務增加。",
-    "綜合損益表：營業收入上升＝收入增加；費用科目（營業成本、研發費用、推銷及管理費用、利息費用）上升＝費用增加，會使獲利減少；損益科目（資產減損及處分損益、投資類損益、停業單位損益）上升＝利益增加或損失減少，下降＝損失增加或利益減少。",
+    "所有方向都是與這個事件沒發生相比的推估，科目排序依影響的直接程度與證據強度排列。",
+    "資產負債表：上升＝該科目在報導日的帳面金額較高；下降＝較低。",
+    "綜合損益表：費用科目上升＝費用增加，會使獲利減少；損益科目上升＝利益增加或損失減少，下降＝損失增加或利益減少。",
     "不確定＝找得到影響路徑，但依報告書內容無法判斷金額變大或變小。",
 )
-
-# SPEC 17.13 第 4 點：方向圖例下方的兩段說明，原文照用，不得改寫
-FIELD_TAG_NOTE = "標示（原文）者為報告書原本的寫法：報告書未使用低／中／高或短／中／長三級尺度，或影響範圍無法對應到固定分類時，直接列出原文。標示（AI 推論）者為系統依報告書內容推論，報告書並未直接寫出。"
-EVIDENCE_GRADE_NOTE = "每個科目附有證據等級。A：報告書直接點名科目類型或給出金額；B：報告書描述了經濟後果（例如成本增加），但沒有點名科目；C：報告書沒有直接提及，由系統推論，並列出推論所依賴的前提。證據等級只表示推論與報告書文字的距離，不代表影響大小。"
+EVIDENCE_GRADE_LEGEND: tuple[str, ...] = (
+    "A：報告書直接點名科目類型或給出金額",
+    "B：報告書描述了經濟後果，但沒有點名科目",
+    "C：報告書沒有直接提及，由系統推論，並列出推論所依賴的前提。",
+)
 
 # 推理說明展開區的證據等級短說明（SPEC 17.13 第 3 點；鍵＝constants.EVIDENCE_GRADES）
 EVIDENCE_GRADE_SHORT: dict[str, str] = {
@@ -150,29 +149,29 @@ class CellLine:
 
 
 def level_cell(level, raw) -> list[CellLine]:
-    """影響時間、發生可能性、衝擊強度（SPEC 17.13 第 2 點）：等級 → 原文用語（原文）→ 報告書未提供。"""
+    """影響時間、發生可能性、衝擊強度（SPEC 17.13 第 2 點）：等級 → 原文用語（原文）→ 「—」。"""
     if _has(level):
         return [CellLine(str(level))]
     if _has(raw):
         return [CellLine(clean_raw(raw), TAG_RAW)]
-    return [CellLine(NOT_PROVIDED)]
+    return [CellLine(NULL_TEXT)]
 
 
 def scope_cell(item: FinalItem) -> list[CellLine]:
-    """影響範圍分兩行：原文（P1 影響範圍，否則影響範圍原文用語＋（原文））；AI 推論（P2 影響公司哪一塊）。"""
+    """影響範圍分兩行：原文（P1 影響範圍，否則影響範圍原文用語＋（原文））；P2「影響公司哪一塊」（不加標示）。"""
     lines: list[CellLine] = []
     if _has(item.scope):
         lines.append(CellLine(str(item.scope)))
     elif _has(item.scope_raw):
         lines.append(CellLine(clean_raw(item.scope_raw), TAG_RAW))
     if _has(item.where) and item.where.strip() != WHERE_NOT_MENTIONED:
-        lines.append(CellLine(item.where.strip(), TAG_AI))
-    return lines or [CellLine(NOT_PROVIDED)]
+        lines.append(CellLine(item.where.strip()))
+    return lines or [CellLine(NULL_TEXT)]
 
 
 def financial_impact_text(item: FinalItem) -> str:
-    """公司揭露的財務影響＝P1「顯示財務Impact」；null 顯示「報告書未提供」。"""
-    return item.financial_impact if _has(item.financial_impact) else NOT_PROVIDED
+    """公司揭露的財務影響＝P1「顯示財務Impact」；null 顯示「—」。"""
+    return item.financial_impact if _has(item.financial_impact) else NULL_TEXT
 
 
 def accounts_lines(item: FinalItem) -> list[str]:
@@ -232,7 +231,7 @@ def build_site(paths: ProjectPaths, settings: Settings) -> Path:
                        financial_impact_text=financial_impact_text, reasoning_detail=reasoning_detail)
     html = env.get_template("index.html.j2").render(
         views=collect_latest(paths), ok=REPORT_STATUS_OK, legend=DIRECTION_LEGEND,
-        field_tag_note=FIELD_TAG_NOTE, evidence_grade_note=EVIDENCE_GRADE_NOTE,
+        grade_legend=EVIDENCE_GRADE_LEGEND,
     )
     out = paths.site_dir / "index.html"
     atomic_write_text(out, html)

@@ -25,11 +25,9 @@ from esgfin.schemas.p1 import P1Item
 from esgfin.schemas.p2 import P2Result
 from esgfin.site.build import (
     DIRECTION_LEGEND,
-    EVIDENCE_GRADE_NOTE,
+    EVIDENCE_GRADE_LEGEND,
     EVIDENCE_GRADE_SHORT,
-    FIELD_TAG_NOTE,
-    NOT_PROVIDED,
-    TAG_AI,
+    NULL_TEXT,
     TAG_RAW,
     CellLine,
     accounts_lines,
@@ -247,14 +245,27 @@ def test_from_stage_check_reuses_stage_usage_without_llm(project, make_runner):
 # ---------------------------------------------------------------- S8
 
 
-def _spec_legend() -> list[str]:
+def _spec_1713_list(title: str) -> list[str]:
+    """SPEC 17.13 第 4 點中，標題行（例如「方向圖例」）下方連續的「- 」各行。"""
     spec = (ROOT / "SPEC.md").read_text(encoding="utf-8")
-    block = spec.split("### 12.4", 1)[1].split("---", 1)[0]
-    return [line[2:].strip() for line in block.splitlines() if line.startswith("- ")]
+    block = spec.split("### 17.13", 1)[1].split("\n---", 1)[0].splitlines()
+    start = block.index(title) + 1
+    out = []
+    for line in block[start:]:
+        if not line.startswith("- "):
+            break
+        out.append(line[2:].strip())
+    return out
 
 
 def test_legend_is_verbatim_from_spec():
-    assert list(DIRECTION_LEGEND) == _spec_legend()
+    assert list(DIRECTION_LEGEND) == _spec_1713_list("方向圖例")
+    assert len(DIRECTION_LEGEND) == 4
+
+
+def test_evidence_grade_legend_is_verbatim_from_spec():
+    assert list(EVIDENCE_GRADE_LEGEND) == _spec_1713_list("證據等級")
+    assert len(EVIDENCE_GRADE_LEGEND) == 3
 
 
 def test_site_null_dash_and_cell_format(project, make_runner):
@@ -267,9 +278,11 @@ def test_site_null_dash_and_cell_format(project, make_runner):
     html = (project / "site" / "index.html").read_text(encoding="utf-8")
     for line in DIRECTION_LEGEND:
         assert line in html
-    assert FIELD_TAG_NOTE in html and EVIDENCE_GRADE_NOTE in html
-    assert html.index("方向圖例") < html.index("欄位標示") < html.index("<table")
-    assert f'<td class="level nw">{NOT_PROVIDED}</td>' in html  # 發生可能性與原文用語皆 null
+    for line in EVIDENCE_GRADE_LEGEND:
+        assert line in html
+    assert html.index("方向圖例") < html.index("<h3>證據等級</h3>") < html.index("<table")
+    assert "欄位標示" not in html and "AI 推論" not in html and "報告書未提供" not in html
+    assert f'<td class="level nw">{NULL_TEXT}</td>' in html  # 發生可能性與原文用語皆 null
     assert "None" not in re.sub(r"<style>.*?</style>", "", html, flags=re.S)
     assert '<div class="stmt">綜合損益表</div><div class="acc">1. 營業成本（上升）</div>' in html
     assert '<td class="nw">轉型風險</td><td class="nw">市場</td>' in html  # 類型、子類別分兩欄
@@ -292,23 +305,6 @@ def test_accounts_lines_order_balance_sheet_first():
 # ---------------------------------------------------------------- S8 顯示（SPEC 17.13）
 
 
-def _spec_1713_notes() -> dict[str, str]:
-    spec = (ROOT / "SPEC.md").read_text(encoding="utf-8")
-    block = spec.split("### 17.13", 1)[1].split("\n---", 1)[0]
-    out = {}
-    for line in block.splitlines():
-        for key in ("欄位標示", "證據等級"):
-            if line.startswith(f"- {key}："):
-                out[key] = line[len(f"- {key}："):].strip()
-    return out
-
-
-def test_explanation_notes_are_verbatim_from_spec():
-    notes = _spec_1713_notes()
-    assert FIELD_TAG_NOTE == notes["欄位標示"]
-    assert EVIDENCE_GRADE_NOTE == notes["證據等級"]
-
-
 def test_evidence_grade_short_covers_all_grades():
     assert tuple(EVIDENCE_GRADE_SHORT) == C.EVIDENCE_GRADES
 
@@ -322,8 +318,8 @@ def fitem(code="X-001", p2: P2Result | None = None, severe=(), **p1) -> FinalIte
 def test_level_cell_level_raw_and_missing():
     assert level_cell("中", "中期") == [CellLine("中")]
     assert level_cell(None, "或許可能（33-50%會發生）") == [CellLine("或許可能（33-50%會發生）", TAG_RAW)]
-    assert level_cell(None, None) == [CellLine(NOT_PROVIDED)]
-    assert level_cell(None, "  ") == [CellLine(NOT_PROVIDED)]
+    assert level_cell(None, None) == [CellLine(NULL_TEXT)]
+    assert level_cell(None, "  ") == [CellLine(NULL_TEXT)]
     assert level_cell(None, "非常 可能\n（>90%會發生）") == [CellLine("非常可能（>90%會發生）", TAG_RAW)]
 
 
@@ -343,26 +339,26 @@ def _where(content: str) -> P2Result:
 def test_scope_cell_two_lines_one_line_and_none():
     # 兩行都有：P1 影響範圍＋AI 推論
     f = fitem(p2=_where("公司直接營運與供應鏈"), **{"影響範圍": "全公司"})
-    assert scope_cell(f) == [CellLine("全公司"), CellLine("公司直接營運與供應鏈", TAG_AI)]
+    assert scope_cell(f) == [CellLine("全公司"), CellLine("公司直接營運與供應鏈")]
     # 原文用語（原文）＋AI 推論
     f = fitem(p2=_where("營運成本"), **{"影響範圍": None, "影響範圍原文用語": "公司直接 營運"})
-    assert scope_cell(f) == [CellLine("公司直接營運", TAG_RAW), CellLine("營運成本", TAG_AI)]
+    assert scope_cell(f) == [CellLine("公司直接營運", TAG_RAW), CellLine("營運成本")]
     # 只有原文一行：AI 內容為「未提及」
     f = fitem(p2=_where("未提及"), **{"影響範圍": "全公司"})
     assert scope_cell(f) == [CellLine("全公司")]
     # 只有 AI 一行
     f = fitem(p2=_where("營運成本"), **{"影響範圍": None, "影響範圍原文用語": None})
-    assert scope_cell(f) == [CellLine("營運成本", TAG_AI)]
+    assert scope_cell(f) == [CellLine("營運成本")]
     # 都沒有：推理失敗（無 P2）且 P1 皆 null
     f = fitem(p2=None, **{"影響範圍": None, "影響範圍原文用語": None})
-    assert scope_cell(f) == [CellLine(NOT_PROVIDED)]
+    assert scope_cell(f) == [CellLine(NULL_TEXT)]
     f = fitem(p2=_where(""), **{"影響範圍": None, "影響範圍原文用語": None})
-    assert scope_cell(f) == [CellLine(NOT_PROVIDED)]
+    assert scope_cell(f) == [CellLine(NULL_TEXT)]
 
 
 def test_financial_impact_text_and_null():
     assert financial_impact_text(fitem()) == "營運成本增加"
-    assert financial_impact_text(fitem(**{"顯示財務Impact": None})) == NOT_PROVIDED
+    assert financial_impact_text(fitem(**{"顯示財務Impact": None})) == NULL_TEXT
 
 
 def test_final_item_carries_where_and_rationale_from_p2():
@@ -426,6 +422,6 @@ def test_site_renders_raw_tags_and_detail(project, make_runner):
     html = (project / "site" / "index.html").read_text(encoding="utf-8")
     assert f'<span class="raw">長期<small class="tag">{TAG_RAW}</small></span>' in html
     assert f'<div class="line">公司直接營運<small class="tag">{TAG_RAW}</small></div>' in html
-    assert f'<div class="line">x<small class="tag">{TAG_AI}</small></div>' in html  # fake P2 的影響公司哪一塊＝x
+    assert '<div class="line">x</div>' in html  # fake P2 的影響公司哪一塊＝x，不加標示
     assert "證據等級 B：報告書描述經濟後果，未點名科目" in html
     assert "<h4>判斷理由</h4><p>理由</p>" in html
