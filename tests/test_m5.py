@@ -23,7 +23,22 @@ from esgfin.pipeline.runner import RunOptions
 from esgfin.schemas.final import FinalItem, Metrics, Ratio
 from esgfin.schemas.p1 import P1Item
 from esgfin.schemas.p2 import P2Result
-from esgfin.site.build import DIRECTION_LEGEND, accounts_lines
+from esgfin.site.build import (
+    DIRECTION_LEGEND,
+    EVIDENCE_GRADE_NOTE,
+    EVIDENCE_GRADE_SHORT,
+    FIELD_TAG_NOTE,
+    NOT_PROVIDED,
+    TAG_AI,
+    TAG_RAW,
+    CellLine,
+    accounts_lines,
+    clean_raw,
+    financial_impact_text,
+    level_cell,
+    reasoning_detail,
+    scope_cell,
+)
 
 ROOT = Path(__file__).resolve().parents[1]
 REALTEK = "realtek_2024_ESG"
@@ -252,11 +267,19 @@ def test_site_null_dash_and_cell_format(project, make_runner):
     html = (project / "site" / "index.html").read_text(encoding="utf-8")
     for line in DIRECTION_LEGEND:
         assert line in html
-    assert html.index("方向圖例") < html.index("<table")
-    assert "<td>—</td>" in html  # 發生可能性 null
+    assert FIELD_TAG_NOTE in html and EVIDENCE_GRADE_NOTE in html
+    assert html.index("方向圖例") < html.index("欄位標示") < html.index("<table")
+    assert f'<td class="level nw">{NOT_PROVIDED}</td>' in html  # 發生可能性與原文用語皆 null
     assert "None" not in re.sub(r"<style>.*?</style>", "", html, flags=re.S)
     assert '<div class="stmt">綜合損益表</div><div class="acc">1. 營業成本（上升）</div>' in html
-    assert "轉型風險／市場" in html
+    assert '<td class="nw">轉型風險</td><td class="nw">市場</td>' in html  # 類型、子類別分兩欄
+    heads = re.findall(r"<th>(.*?)</th>", html)
+    assert heads[:10] == ["代碼", "類型", "子類別", "事件描述", "公司揭露的財務影響", "影響時間",
+                          "發生可能性", "衝擊強度", "影響範圍", "潛在受影響會計科目"]
+    assert "<th>方法</th>" not in html
+    assert '<details class="why"><summary>推理說明</summary>' in html and "<details open" not in html
+    assert "<script" not in html
+    assert "原文依據" not in html and "原文引用" not in html and "頁碼" not in html  # 不顯示原文引用與頁碼
 
 
 def test_accounts_lines_order_balance_sheet_first():
@@ -264,3 +287,145 @@ def test_accounts_lines_order_balance_sheet_first():
     f = final_item(item, make_p2("X-001", bs=[acc("存貨", 1, "下降")], inc=[acc("營業成本", 1)]), set())
     assert accounts_lines(f) == ["資產負債表", "  1. 存貨（下降）", "綜合損益表", "  1. 營業成本（上升）"]
     assert isinstance(f, FinalItem)
+
+
+# ---------------------------------------------------------------- S8 顯示（SPEC 17.13）
+
+
+def _spec_1713_notes() -> dict[str, str]:
+    spec = (ROOT / "SPEC.md").read_text(encoding="utf-8")
+    block = spec.split("### 17.13", 1)[1].split("\n---", 1)[0]
+    out = {}
+    for line in block.splitlines():
+        for key in ("欄位標示", "證據等級"):
+            if line.startswith(f"- {key}："):
+                out[key] = line[len(f"- {key}："):].strip()
+    return out
+
+
+def test_explanation_notes_are_verbatim_from_spec():
+    notes = _spec_1713_notes()
+    assert FIELD_TAG_NOTE == notes["欄位標示"]
+    assert EVIDENCE_GRADE_NOTE == notes["證據等級"]
+
+
+def test_evidence_grade_short_covers_all_grades():
+    assert tuple(EVIDENCE_GRADE_SHORT) == C.EVIDENCE_GRADES
+
+
+def fitem(code="X-001", p2: P2Result | None = None, severe=(), **p1) -> FinalItem:
+    d = full_item(code)
+    d.update(p1)
+    return final_item(P1Item.model_validate(d), p2, set(severe))
+
+
+def test_level_cell_level_raw_and_missing():
+    assert level_cell("中", "中期") == [CellLine("中")]
+    assert level_cell(None, "或許可能（33-50%會發生）") == [CellLine("或許可能（33-50%會發生）", TAG_RAW)]
+    assert level_cell(None, None) == [CellLine(NOT_PROVIDED)]
+    assert level_cell(None, "  ") == [CellLine(NOT_PROVIDED)]
+    assert level_cell(None, "非常 可能\n（>90%會發生）") == [CellLine("非常可能（>90%會發生）", TAG_RAW)]
+
+
+def test_clean_raw_removes_spaces_between_cjk_only():
+    assert clean_raw("公司直接\n營運") == "公司直接營運"
+    assert clean_raw("中 高") == "中高"
+    assert clean_raw("天氣 ( 立即性 )") == "天氣 ( 立即性 )"  # 半形括號旁的空白不動
+    assert clean_raw("ESG  投資\n影響") == "ESG 投資影響"
+
+
+def _where(content: str) -> P2Result:
+    p = make_p2(inc=[acc("營業成本", 1)])
+    p.understanding.where.content = content
+    return p
+
+
+def test_scope_cell_two_lines_one_line_and_none():
+    # 兩行都有：P1 影響範圍＋AI 推論
+    f = fitem(p2=_where("公司直接營運與供應鏈"), **{"影響範圍": "全公司"})
+    assert scope_cell(f) == [CellLine("全公司"), CellLine("公司直接營運與供應鏈", TAG_AI)]
+    # 原文用語（原文）＋AI 推論
+    f = fitem(p2=_where("營運成本"), **{"影響範圍": None, "影響範圍原文用語": "公司直接 營運"})
+    assert scope_cell(f) == [CellLine("公司直接營運", TAG_RAW), CellLine("營運成本", TAG_AI)]
+    # 只有原文一行：AI 內容為「未提及」
+    f = fitem(p2=_where("未提及"), **{"影響範圍": "全公司"})
+    assert scope_cell(f) == [CellLine("全公司")]
+    # 只有 AI 一行
+    f = fitem(p2=_where("營運成本"), **{"影響範圍": None, "影響範圍原文用語": None})
+    assert scope_cell(f) == [CellLine("營運成本", TAG_AI)]
+    # 都沒有：推理失敗（無 P2）且 P1 皆 null
+    f = fitem(p2=None, **{"影響範圍": None, "影響範圍原文用語": None})
+    assert scope_cell(f) == [CellLine(NOT_PROVIDED)]
+    f = fitem(p2=_where(""), **{"影響範圍": None, "影響範圍原文用語": None})
+    assert scope_cell(f) == [CellLine(NOT_PROVIDED)]
+
+
+def test_financial_impact_text_and_null():
+    assert financial_impact_text(fitem()) == "營運成本增加"
+    assert financial_impact_text(fitem(**{"顯示財務Impact": None})) == NOT_PROVIDED
+
+
+def test_final_item_carries_where_and_rationale_from_p2():
+    p = _where("營運成本")
+    f = fitem(p2=p)
+    assert (f.where, f.rationale) == ("營運成本", "理由")
+    d = json.loads(f.model_dump_json())
+    assert d["影響公司哪一塊"] == "營運成本" and d["判斷理由"] == "理由"
+    f = fitem(p2=p, severe={"X-001"})  # 檢查未通過仍保留 P2 的兩欄
+    assert (f.where, f.rationale) == ("營運成本", "理由")
+    assert (fitem(p2=None).where, fitem(p2=None).rationale) == (None, None)
+
+
+def test_old_final_json_without_new_fields_still_loads():
+    from esgfin.schemas.final import FinalReport
+
+    item = json.loads(fitem(p2=_where("營運成本")).model_dump_json())
+    del item["影響公司哪一塊"], item["判斷理由"]
+    f = FinalItem.model_validate(item)
+    assert f.where is None and f.rationale is None
+    assert reasoning_detail(f).rationale is None
+    assert scope_cell(f) == [CellLine("全公司")]
+
+
+def test_reasoning_detail_accounts_grade_and_premise():
+    p = make_p2(bs=[acc("存貨", 1, "下降", grade="C", quote=None, premise="假設存貨為原料")],
+                inc=[acc(a, i, grade="A") for i, a in enumerate(C.INCOME_STATEMENT_ACCOUNT_NAMES[:4], 1)])
+    r = reasoning_detail(fitem(p2=p))
+    assert r.rationale == "理由"
+    assert [t for t, _ in r.statements] == ["資產負債表", "綜合損益表"]
+    bs = r.statements[0][1][0]
+    assert bs.heading == "存貨（下降）"
+    assert bs.grade == "證據等級 C：報告書未直接提及，由系統推論"
+    assert bs.explanation == "說明" and bs.premise == "假設存貨為原料"
+    inc = r.statements[1][1]
+    assert len(inc) == 3  # 只列網頁顯示的前三
+    assert inc[0].grade == "證據等級 A：報告書直接點名科目類型或給出金額" and inc[0].premise is None
+    pb = reasoning_detail(fitem(p2=make_p2(inc=[acc("營業成本", 1, grade="B")]))).statements[0][1][0]
+    assert pb.grade == "證據等級 B：報告書描述經濟後果，未點名科目"
+
+
+def test_reasoning_detail_non_success_only_rationale():
+    p = make_p2(inc=[acc("營業成本", 1)])
+    r = reasoning_detail(fitem(p2=p, severe={"X-001"}))  # 檢查未通過
+    assert r.rationale == "理由" and r.statements == [] and not r.empty
+    r = reasoning_detail(fitem(p2=make_p2(impact=False)))  # 無影響
+    assert r.rationale == "理由" and r.statements == []
+    r = reasoning_detail(fitem(p2=None))  # 推理失敗：無判斷理由 → 不顯示展開區
+    assert r.empty
+
+
+def test_site_renders_raw_tags_and_detail(project, make_runner):
+    from fakes import EXTRACTION, reason_responder
+
+    from esgfin.llm.fake import FakeLLM
+
+    ext = copy.deepcopy(EXTRACTION)
+    ext["items"][0].update({"影響時間": None, "影響時間原文用語": "長 期", "影響範圍": None, "影響範圍原文用語": "公司直接營運"})
+    make_runner(project, registry=m5_registry(), llm=FakeLLM({"p1_extract": ext, "p2_reasoning": reason_responder})).run(
+        RunOptions(reports=["realtek_2024_ESG.pdf"]))
+    html = (project / "site" / "index.html").read_text(encoding="utf-8")
+    assert f'<span class="raw">長期<small class="tag">{TAG_RAW}</small></span>' in html
+    assert f'<div class="line">公司直接營運<small class="tag">{TAG_RAW}</small></div>' in html
+    assert f'<div class="line">x<small class="tag">{TAG_AI}</small></div>' in html  # fake P2 的影響公司哪一塊＝x
+    assert "證據等級 B：報告書描述經濟後果，未點名科目" in html
+    assert "<h4>判斷理由</h4><p>理由</p>" in html

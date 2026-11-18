@@ -1,10 +1,13 @@
 """S8：由各報告書最新一次成功的 07_final.json 產生 site/index.html（SPEC 12）。
 
 版面依 SPEC 12：儲存格格式 12.2、視覺 12.3、方向圖例 12.4（文字照 SPEC 原文）、null 顯示「—」、頁尾免責聲明。
+欄位、等級欄顯示規則、推理說明展開區、說明區另兩段依 SPEC 17.13（2026-11-19），與 12.1 衝突時以 17.13 為準。
+只改顯示，不改 07_final.json 內容。
 """
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -17,6 +20,7 @@ from esgfin.constants import (
     INCOME_STATEMENT,
     REASONING_CHECK_FAILED,
     REASONING_FAILED,
+    REASONING_OK,
     REPORT_STATUS_OK,
 )
 from esgfin.pipeline.paths import ProjectPaths
@@ -95,6 +99,10 @@ def collect_latest(paths: ProjectPaths) -> list[ReportView]:
 
 
 NULL_TEXT = "—"
+NOT_PROVIDED = "報告書未提供"  # SPEC 17.13：等級欄、公司揭露的財務影響為 null 時
+TAG_RAW = "（原文）"
+TAG_AI = "（AI 推論）"
+WHERE_NOT_MENTIONED = "未提及"  # P2 提示：原文沒有提到時「內容」寫「未提及」（prompts/p2_reasoning_v1.md）
 
 # SPEC 12.4 方向圖例【已決定 2026-11-12】，原文照用，不得改寫
 DIRECTION_LEGEND: tuple[str, ...] = (
@@ -104,15 +112,67 @@ DIRECTION_LEGEND: tuple[str, ...] = (
     "不確定＝找得到影響路徑，但依報告書內容無法判斷金額變大或變小。",
 )
 
+# SPEC 17.13 第 4 點：方向圖例下方的兩段說明，原文照用，不得改寫
+FIELD_TAG_NOTE = "標示（原文）者為報告書原本的寫法：報告書未使用低／中／高或短／中／長三級尺度，或影響範圍無法對應到固定分類時，直接列出原文。標示（AI 推論）者為系統依報告書內容推論，報告書並未直接寫出。"
+EVIDENCE_GRADE_NOTE = "每個科目附有證據等級。A：報告書直接點名科目類型或給出金額；B：報告書描述了經濟後果（例如成本增加），但沒有點名科目；C：報告書沒有直接提及，由系統推論，並列出推論所依賴的前提。證據等級只表示推論與報告書文字的距離，不代表影響大小。"
+
+# 推理說明展開區的證據等級短說明（SPEC 17.13 第 3 點；鍵＝constants.EVIDENCE_GRADES）
+EVIDENCE_GRADE_SHORT: dict[str, str] = {
+    "A": "報告書直接點名科目類型或給出金額",
+    "B": "報告書描述經濟後果，未點名科目",
+    "C": "報告書未直接提及，由系統推論",
+}
+
+_CJK = r"\u3000-\u303f\u3400-\u4dbf\u4e00-\u9fff\uf900-\ufaff\uff00-\uffef"
+_CJK_GAP = re.compile(rf"(?<=[{_CJK}])\s+(?=[{_CJK}])")
+
+
+def clean_raw(text: str) -> str:
+    """原文用語的顯示：去掉中文字（含全形標點）之間因 Docling 換行產生的空白，其餘連續空白縮成一格。只用於顯示。"""
+    return " ".join(_CJK_GAP.sub("", text).split())
+
 
 def show(v) -> str:
     """null 或空字串顯示為「—」（SPEC 12.1）。"""
     return NULL_TEXT if v is None or (isinstance(v, str) and not v.strip()) else str(v)
 
 
-def type_text(item: FinalItem) -> str:
-    """類型與子類別，例如「轉型風險／政策與法規」；子類別 null 時顯示「轉型風險／—」。"""
-    return f"{item.item_type}／{show(item.subcategory)}"
+def _has(v) -> bool:
+    return v is not None and (not isinstance(v, str) or bool(v.strip()))
+
+
+@dataclass(frozen=True)
+class CellLine:
+    """儲存格的一行：文字與小字標示（無標示為 None）。"""
+
+    text: str
+    tag: str | None = None
+
+
+def level_cell(level, raw) -> list[CellLine]:
+    """影響時間、發生可能性、衝擊強度（SPEC 17.13 第 2 點）：等級 → 原文用語（原文）→ 報告書未提供。"""
+    if _has(level):
+        return [CellLine(str(level))]
+    if _has(raw):
+        return [CellLine(clean_raw(raw), TAG_RAW)]
+    return [CellLine(NOT_PROVIDED)]
+
+
+def scope_cell(item: FinalItem) -> list[CellLine]:
+    """影響範圍分兩行：原文（P1 影響範圍，否則影響範圍原文用語＋（原文））；AI 推論（P2 影響公司哪一塊）。"""
+    lines: list[CellLine] = []
+    if _has(item.scope):
+        lines.append(CellLine(str(item.scope)))
+    elif _has(item.scope_raw):
+        lines.append(CellLine(clean_raw(item.scope_raw), TAG_RAW))
+    if _has(item.where) and item.where.strip() != WHERE_NOT_MENTIONED:
+        lines.append(CellLine(item.where.strip(), TAG_AI))
+    return lines or [CellLine(NOT_PROVIDED)]
+
+
+def financial_impact_text(item: FinalItem) -> str:
+    """公司揭露的財務影響＝P1「顯示財務Impact」；null 顯示「報告書未提供」。"""
+    return item.financial_impact if _has(item.financial_impact) else NOT_PROVIDED
 
 
 def accounts_lines(item: FinalItem) -> list[str]:
@@ -129,10 +189,51 @@ def accounts_lines(item: FinalItem) -> list[str]:
     return lines
 
 
+@dataclass(frozen=True)
+class AccountDetail:
+    heading: str  # 科目（方向）
+    grade: str  # 證據等級 B：短說明
+    explanation: str  # 傳導說明
+    premise: str | None  # 推論前提（null 不顯示）
+
+
+@dataclass(frozen=True)
+class Reasoning:
+    rationale: str | None
+    statements: list[tuple[str, list[AccountDetail]]]  # [(表名, 科目)]，只含網頁顯示的科目
+
+    @property
+    def empty(self) -> bool:
+        return not self.rationale and not self.statements
+
+
+def reasoning_detail(item: FinalItem) -> Reasoning:
+    """推理說明展開區（SPEC 17.13 第 3 點）。科目只在推理狀態成功且有影響時列出；不含原文引用與頁碼。"""
+    rationale = item.rationale.strip() if _has(item.rationale) else None
+    statements: list[tuple[str, list[AccountDetail]]] = []
+    if item.reasoning_status == REASONING_OK and item.top_accounts not in (None, IMPACT_NO):
+        for title, rows in ((BALANCE_SHEET, item.top_accounts.balance_sheet), (INCOME_STATEMENT, item.top_accounts.income_statement)):
+            if rows:
+                statements.append((title, [
+                    AccountDetail(
+                        heading=f"{r.account}（{r.direction}）",
+                        grade=f"證據等級 {r.evidence_grade}：{EVIDENCE_GRADE_SHORT[r.evidence_grade]}",
+                        explanation=r.explanation,
+                        premise=r.inference_premise if _has(r.inference_premise) else None,
+                    )
+                    for r in rows
+                ]))
+    return Reasoning(rationale=rationale, statements=statements)
+
+
 def build_site(paths: ProjectPaths, settings: Settings) -> Path:
     env = Environment(loader=FileSystemLoader(TEMPLATES), autoescape=select_autoescape(["html", "j2"]))
-    env.globals.update(accounts_lines=accounts_lines, show=show, type_text=type_text)
-    html = env.get_template("index.html.j2").render(views=collect_latest(paths), ok=REPORT_STATUS_OK, legend=DIRECTION_LEGEND)
+    env.globals.update(accounts_lines=accounts_lines, show=show, level_cell=level_cell, scope_cell=scope_cell,
+                       financial_impact_text=financial_impact_text, reasoning_detail=reasoning_detail)
+    html = env.get_template("index.html.j2").render(
+        views=collect_latest(paths), ok=REPORT_STATUS_OK, legend=DIRECTION_LEGEND,
+        field_tag_note=FIELD_TAG_NOTE, evidence_grade_note=EVIDENCE_GRADE_NOTE,
+    )
     out = paths.site_dir / "index.html"
     atomic_write_text(out, html)
     return out

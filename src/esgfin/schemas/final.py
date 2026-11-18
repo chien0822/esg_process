@@ -40,6 +40,9 @@ class FinalItem(P1Item):
     # 只在無影響時為「不影響」，其餘為 None
     direction: Literal[DIRECTION_NONE] | None = zh("影響方向", default=None)
     no_impact_reason: Literal[NO_IMPACT_REASONS] | None = zh("無影響理由類型", default=None)
+    # 以下兩欄由 S7 從 P2 填入，供網頁顯示（SPEC 17.13）；選填，舊的 07_final.json 沒有這兩欄仍可讀取
+    where: str | None = zh("影響公司哪一塊", default=None)  # P2 理解紀錄「影響公司哪一塊」的「內容」
+    rationale: str | None = zh("判斷理由", default=None)  # P2 的「判斷理由」
 
 
 class FinalReport(StrictModel):

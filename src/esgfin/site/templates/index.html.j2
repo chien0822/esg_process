@@ -29,15 +29,33 @@
   .legend { border-left: 4px solid var(--secondary); padding: 4px 8px 4px 12px; margin: 0 0 12px; font-size: 0.85rem; }
   .legend h3 { font-size: 0.95rem; margin: 0 0 4px; }
   .legend ul { margin: 0; padding-left: 1.2em; }
+  .legend p { margin: 0 0 4px; }
   .table-wrap { overflow-x: auto; max-width: 100%; }
-  table { border-collapse: collapse; min-width: 1100px; width: 100%; font-size: 0.9rem; overflow-wrap: normal; }
+  table { border-collapse: collapse; min-width: 1240px; width: 100%; font-size: 0.9rem; overflow-wrap: normal; }
   th { background: var(--primary); color: var(--bg); text-align: left; white-space: nowrap; }
   th, td { border: 1px solid var(--secondary); padding: 6px 8px; vertical-align: top; }
-  td.code { white-space: nowrap; }
-  td.event { min-width: 16em; }
+  /* 短欄不折行；事件描述、公司揭露的財務影響、影響範圍給固定寬度，文字在格內換行 */
+  td.nw { white-space: nowrap; }
+  col.c-event { width: 18em; }
+  col.c-impact { width: 15em; }
+  col.c-scope { width: 13em; }
+  td.wide { white-space: normal; }
+  td.level .raw { display: inline-block; min-width: 7em; }
+  td.scope .line + .line { margin-top: 4px; }
+  .tag { font-size: 0.75rem; opacity: 0.85; white-space: nowrap; }
   td.accounts { white-space: nowrap; }
   td.accounts .stmt { font-weight: bold; }
   td.accounts .acc { padding-left: 1em; }
+  /* 推理說明：展開區固定在捲動區塊左側，寬度不超過視窗，窄螢幕不需橫向捲動閱讀 */
+  tr.detail td { border-top: none; padding: 2px 8px 6px; }
+  tr.main.has-detail td { border-bottom: none; }
+  details.why { position: sticky; left: 8px; max-width: min(60em, calc(100vw - 90px)); font-size: 0.85rem; white-space: normal; }
+  details.why summary { cursor: pointer; width: max-content; }
+  details.why .body { border-left: 4px solid var(--secondary); padding: 4px 8px 4px 12px; margin-top: 4px; }
+  details.why h4 { font-size: 0.85rem; margin: 6px 0 2px; }
+  details.why p { margin: 0 0 4px; }
+  details.why .acc { margin: 0 0 6px 1em; }
+  details.why .acc-name { font-weight: bold; }
   footer { font-size: 0.85rem; text-align: center; margin-top: 32px; }
 </style>
 </head>
@@ -56,20 +74,49 @@
     <h3>方向圖例</h3>
     <ul>{% for line in legend %}<li>{{ line }}</li>{% endfor %}</ul>
   </div>
+  <div class="legend">
+    <h3>欄位標示</h3>
+    <p>{{ field_tag_note }}</p>
+    <h3>證據等級</h3>
+    <p>{{ evidence_grade_note }}</p>
+  </div>
   <div class="table-wrap">
   <table>
+    <colgroup>
+      <col><col><col><col class="c-event"><col class="c-impact"><col><col><col><col class="c-scope"><col>
+    </colgroup>
     <thead><tr>
-      <th>代碼</th><th>方法</th><th>類型與子類別</th><th>事件描述</th><th>影響時間</th>
+      <th>代碼</th><th>類型</th><th>子類別</th><th>事件描述</th><th>公司揭露的財務影響</th><th>影響時間</th>
       <th>發生可能性</th><th>衝擊強度</th><th>影響範圍</th><th>潛在受影響會計科目</th>
     </tr></thead>
     <tbody>
     {% for it in v.final.items %}
-    <tr>
-      <td class="code">{{ it.code }}</td><td>{{ show(it.method) }}</td><td>{{ type_text(it) }}</td>
-      <td class="event">{{ show(it.event_description) }}</td><td>{{ show(it.time_horizon) }}</td>
-      <td>{{ show(it.likelihood) }}</td><td>{{ show(it.severity) }}</td><td>{{ show(it.scope) }}</td>
+    {% set why = reasoning_detail(it) %}
+    <tr class="main{% if not why.empty %} has-detail{% endif %}">
+      <td class="nw">{{ it.code }}</td><td class="nw">{{ it.item_type }}</td><td class="nw">{{ show(it.subcategory) }}</td>
+      <td class="wide">{{ show(it.event_description) }}</td><td class="wide">{{ financial_impact_text(it) }}</td>
+      {% for lv, raw in ((it.time_horizon, it.time_horizon_raw), (it.likelihood, it.likelihood_raw), (it.severity, it.severity_raw)) %}
+      {% for line in level_cell(lv, raw) %}{% if line.tag %}<td class="level"><span class="raw">{{ line.text }}<small class="tag">{{ line.tag }}</small></span></td>{% else %}<td class="level nw">{{ line.text }}</td>{% endif %}{% endfor %}
+      {% endfor %}
+      <td class="wide scope">{% for line in scope_cell(it) %}<div class="line">{{ line.text }}{% if line.tag %}<small class="tag">{{ line.tag }}</small>{% endif %}</div>{% endfor %}</td>
       <td class="accounts">{% for line in accounts_lines(it) %}{% if line.startswith("  ") %}<div class="acc">{{ line.strip() }}</div>{% else %}<div class="stmt">{{ line }}</div>{% endif %}{% endfor %}</td>
     </tr>
+    {% if not why.empty %}
+    <tr class="detail"><td colspan="10">
+      <details class="why"><summary>推理說明</summary><div class="body">
+        {% if why.rationale %}<h4>判斷理由</h4><p>{{ why.rationale }}</p>{% endif %}
+        {% for title, accs in why.statements %}
+        <h4>{{ title }}</h4>
+        {% for a in accs %}<div class="acc">
+          <p class="acc-name">{{ a.heading }}</p>
+          <p>{{ a.grade }}</p>
+          <p>傳導說明：{{ a.explanation }}</p>
+          {% if a.premise %}<p>推論前提：{{ a.premise }}</p>{% endif %}
+        </div>{% endfor %}
+        {% endfor %}
+      </div></details>
+    </td></tr>
+    {% endif %}
     {% endfor %}
     </tbody>
   </table>

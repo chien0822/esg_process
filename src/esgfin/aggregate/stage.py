@@ -60,7 +60,8 @@ def final_item(item: P1Item, p2: P2Result | None, severe: set[str]) -> FinalItem
     base = item.model_dump()
     if p2 is None:
         return FinalItem(**base, reasoning_status=REASONING_FAILED)
-    common = dict(overall=p2.overall, no_impact_reason=p2.no_impact_reason)
+    common = dict(overall=p2.overall, no_impact_reason=p2.no_impact_reason,
+                  where=p2.understanding.where.content, rationale=p2.rationale)
     if item.code in severe:
         return FinalItem(**base, reasoning_status=REASONING_CHECK_FAILED, **common)
     if p2.overall == IMPACT_NO:
