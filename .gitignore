@@ -21,3 +21,6 @@ __pycache__/
 
 #指令
 /m3/
+
+# Windows 複製檔案時產生的附屬檔
+*:Zone.Identifier

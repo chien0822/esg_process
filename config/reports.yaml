@@ -20,3 +20,12 @@ reports:
       section_name: 製造業
       version: 待確認
       detail: null
+  - file: heysong_2025_ESG.pdf
+    company_full_name: 黑松股份有限公司
+    stock_code: "1234"
+    report_year: 2025
+    industry:
+      section_code: C
+      section_name: 製造業
+      version: 待確認
+      detail: null
