@@ -2,7 +2,8 @@
 
   uv run python scripts/review_p2.py <run_id>
 
-每個條目列出 P1 摘要、理解紀錄、傳導管道、兩張表的科目，以及每段引文對條目頁碼（含 check.citation_page_buffer）
+開頭先列統計（每條各表的科目數、證據等級分布、推論前提非 null 數、原文依據 null 數、應付款項及合約負債與
+應收款項及合約資產的出現次數），再逐條列出 P1 摘要、理解紀錄、傳導管道、兩張表的科目，以及每段引文對條目頁碼（含 check.citation_page_buffer）
 text_md 的驗證結果（呼叫 check/citation.py）。引文結果只供參考，不是 S6；本腳本不判斷答案對錯。
 """
 
@@ -16,11 +17,15 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
 from esgfin.check.citation import match_quote  # noqa: E402
+from esgfin.constants import BALANCE_SHEET, INCOME_STATEMENT  # noqa: E402
 from esgfin.schemas.base import read_jsonl, read_model  # noqa: E402
 from esgfin.schemas.p1 import P1Items  # noqa: E402
 from esgfin.schemas.pages import PageRecord  # noqa: E402
 
 UNDERSTANDING = ("事件是什麼", "影響公司哪一塊", "已發生或預期", "量化線索", "公司因應")
+PAYABLE, RECEIVABLE = "應付款項及合約負債", "應收款項及合約資產"
+STAT_COLS = ("代碼", "整體判斷", "表", "科目數", "A", "B", "C", "推論前提非null", "原文依據null",
+             f"{PAYABLE}（主科目／替代科目）", f"{RECEIVABLE}（主科目／替代科目）")
 ACCOUNT_COLS = ("排序", "科目", "影響方向", "直接性層級", "證據等級", "發生階段", "傳導說明", "推論前提", "原文依據", "替代科目")
 
 
@@ -37,6 +42,53 @@ def citation(quote: str | None, text: str, ratio: float) -> str:
         return "—"
     m = match_quote(quote, text, ratio)
     return f"{m.level}（{m.ratio:.2f}）"
+
+
+def table_stats(rows: list[dict]) -> list[int]:
+    """科目數、A、B、C、推論前提非 null、原文依據 null、應付主／替、應收主／替。"""
+    grades = [r["證據等級"] for r in rows]
+    alt = [a for r in rows for a in r["替代科目"]]
+    return [
+        len(rows), grades.count("A"), grades.count("B"), grades.count("C"),
+        sum(r["推論前提"] is not None for r in rows), sum(r["原文依據"] is None for r in rows),
+        sum(r["科目"] == PAYABLE for r in rows), alt.count(PAYABLE),
+        sum(r["科目"] == RECEIVABLE for r in rows), alt.count(RECEIVABLE),
+    ]
+
+
+def stat_row(head: list[str], v: list[int]) -> str:
+    return "| " + " | ".join([*head, *map(str, v[:6]), f"{v[6]}／{v[7]}", f"{v[8]}／{v[9]}"]) + " |"
+
+
+def stats_section(results: list[tuple[str, dict | None]]) -> list[str]:
+    tables = (BALANCE_SHEET, INCOME_STATEMENT)
+    totals = {t: [0] * 10 for t in tables}
+    rows, failed = [], []
+    for code, p2 in results:
+        if p2 is None:
+            failed.append(code)
+            continue
+        for t in tables:
+            v = table_stats(p2["潛在受影響會計科目"][t])
+            totals[t] = [a + b for a, b in zip(totals[t], v)]
+            rows.append(stat_row([code, p2["整體判斷"], t], v))
+    judged = [p2["整體判斷"] for _, p2 in results if p2 is not None]
+    out = [
+        "## 統計",
+        "",
+        f"條目 {len(results)} 條；成功 {len(judged)}、失敗或未執行 {len(failed)}" + (f"（{'、'.join(failed)}）" if failed else "")
+        + "；整體判斷：" + "、".join(f"{k} {judged.count(k)}" for k in sorted(set(judged))),
+        "",
+        "A／B／C＝證據等級；應付、應收兩欄為「當主科目出現次數／出現在替代科目的次數」。",
+        "",
+        "| " + " | ".join(STAT_COLS) + " |",
+        "|" + "---|" * len(STAT_COLS),
+        *rows,
+    ]
+    out += [stat_row(["**合計**", "", t], totals[t]) for t in tables]
+    both = [a + b for a, b in zip(*totals.values())]
+    out += [stat_row(["**合計**", "", "兩表"], both), ""]
+    return out
 
 
 def item_block(item, p2: dict | None, failed: dict | None, page_text: str, ratio: float) -> list[str]:
@@ -107,6 +159,8 @@ def main() -> int:
         f"引文驗證：對條目頁碼前後各 {buffer} 頁的 text_md，模糊通過門檻 {ratio}；只供參考，不是 S6。",
         "",
     ]
+    results: list[tuple[str, dict | None]] = []
+    body: list[str] = []
     for rid in run["selected_reports"]:
         report_dir = rdir / rid
         items_path = report_dir / "03_p1_items.json"
@@ -123,8 +177,10 @@ def main() -> int:
             p2 = json.loads(ok.read_text(encoding="utf-8")) if ok.exists() else None
             failed = json.loads(bad.read_text(encoding="utf-8")) if bad.exists() else None
             block += item_block(item, p2, failed, page_text, ratio)
+            results.append((item.code, p2))
         if block:
-            lines += [f"## {rid}", "", *block]
+            body += [f"## {rid}", "", *block]
+    lines += [*stats_section(results), *body]
     out = rdir / "p2_review.md"
     out.write_text("\n".join(lines), encoding="utf-8")
     print(out.relative_to(ROOT))
