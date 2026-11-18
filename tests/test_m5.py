@@ -273,7 +273,7 @@ def test_site_null_dash_and_cell_format(project, make_runner):
     assert "None" not in re.sub(r"<style>.*?</style>", "", html, flags=re.S)
     assert '<div class="stmt">綜合損益表</div><div class="acc">1. 營業成本（上升）</div>' in html
     assert '<td class="nw">轉型風險</td><td class="nw">市場</td>' in html  # 類型、子類別分兩欄
-    heads = re.findall(r"<th>(.*?)</th>", html)
+    heads = re.findall(r"<th[^>]*>(.*?)</th>", html)
     assert heads[:10] == ["代碼", "類型", "子類別", "事件描述", "公司揭露的財務影響", "影響時間",
                           "發生可能性", "衝擊強度", "影響範圍", "潛在受影響會計科目"]
     assert "<th>方法</th>" not in html

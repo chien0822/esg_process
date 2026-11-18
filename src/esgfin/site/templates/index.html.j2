@@ -31,16 +31,16 @@
   .legend ul { margin: 0; padding-left: 1.2em; }
   .legend p { margin: 0 0 4px; }
   .table-wrap { overflow-x: auto; max-width: 100%; }
-  table { border-collapse: collapse; min-width: 1240px; width: 100%; font-size: 0.9rem; overflow-wrap: normal; }
+  table { border-collapse: collapse; width: max-content; min-width: 100%; font-size: 0.9rem; overflow-wrap: normal; }
   th { background: var(--primary); color: var(--bg); text-align: left; white-space: nowrap; }
   th, td { border: 1px solid var(--secondary); padding: 6px 8px; vertical-align: top; }
   /* 短欄不折行；事件描述、公司揭露的財務影響、影響範圍給固定寬度，文字在格內換行 */
   td.nw { white-space: nowrap; }
-  col.c-event { width: 18em; }
-  col.c-impact { width: 15em; }
-  col.c-scope { width: 13em; }
+  th.c-event { width: 18em; }
+  th.c-impact { width: 15em; }
+  th.c-scope { width: 13em; }
   td.wide { white-space: normal; }
-  td.level .raw { display: inline-block; min-width: 7em; }
+  td.level .raw { display: inline-block; min-width: 5em; max-width: 8em; white-space: normal; }
   td.scope .line + .line { margin-top: 4px; }
   .tag { font-size: 0.75rem; opacity: 0.85; white-space: nowrap; }
   td.accounts { white-space: nowrap; }
@@ -82,12 +82,9 @@
   </div>
   <div class="table-wrap">
   <table>
-    <colgroup>
-      <col><col><col><col class="c-event"><col class="c-impact"><col><col><col><col class="c-scope"><col>
-    </colgroup>
     <thead><tr>
-      <th>代碼</th><th>類型</th><th>子類別</th><th>事件描述</th><th>公司揭露的財務影響</th><th>影響時間</th>
-      <th>發生可能性</th><th>衝擊強度</th><th>影響範圍</th><th>潛在受影響會計科目</th>
+      <th>代碼</th><th>類型</th><th>子類別</th><th class="c-event">事件描述</th><th class="c-impact">公司揭露的財務影響</th><th>影響時間</th>
+      <th>發生可能性</th><th>衝擊強度</th><th class="c-scope">影響範圍</th><th>潛在受影響會計科目</th>
     </tr></thead>
     <tbody>
     {% for it in v.final.items %}
