@@ -2,7 +2,7 @@
 
 - 空值紀錄（不分級）
 - 引文驗證：原文內容對該條目頁碼（含緩衝）的 text_md
-- 規則：子類別與類型不符；引文不在對應列；子類別原文用語與對應列不符；子類別來源與同義詞表矛盾
+- 規則：子類別與類型不符；引文不在對應列；子類別原文用語與對應列不符（沒有子類別欄時見 SPEC 17.14）；子類別來源與同義詞表矛盾
 """
 
 from __future__ import annotations
@@ -11,6 +11,7 @@ from esgfin.constants import (
     CITATION_EXACT,
     CITATION_FAIL,
     FIELD_SUBCATEGORY,
+    FIELD_TYPE,
     P1_CHECK_RULES,
     RULE_CITATION_FAIL,
     RULE_CITATION_FUZZY,
@@ -51,8 +52,15 @@ def synonym_of(raw: str | None) -> str | None:
     return _SYNONYMS.get(normalize(raw)) if raw else None
 
 
-def check_rules(item: P1Item, row: TableRow | None, page_rows: list[TableRow], sub_col: int | None) -> list[CheckIssue]:
-    """sub_col：子類別欄在重建表的欄序（0 起算）；原表沒有子類別欄時為 None。"""
+def _cell(row: TableRow, col: int | None) -> str | None:
+    return row.cells[col] if col is not None and col < len(row.cells) else None
+
+
+def check_rules(
+    item: P1Item, row: TableRow | None, page_rows: list[TableRow], sub_col: int | None, type_cols: list[int] | None = None
+) -> list[CheckIssue]:
+    """sub_col：子類別欄在重建表的欄序（0 起算）；原表沒有子類別欄時為 None。
+    type_cols：對應到「類型」的欄序（0 起算）；只在沒有子類別欄時使用（SPEC 17.14）。"""
     issues = []
     if item.subcategory is not None and item.subcategory not in SUBCATEGORIES[item.item_type]:
         issues.append(_issue(item, RULE_SUBCATEGORY_MISMATCH, f"子類別「{item.subcategory}」不屬於類型「{item.item_type}」", "子類別"))
@@ -70,12 +78,21 @@ def check_rules(item: P1Item, row: TableRow | None, page_rows: list[TableRow], s
         where = f"出現在同頁第 {'、'.join(map(str, others))} 列（錯位）" if others else "也不在同頁其他列"
         issues.append(_issue(item, RULE_QUOTE_NOT_IN_ROW, f"原文內容.{label} 不在來源列（第 {row.row_on_page} 列）的格子中；{where}", f"原文內容.{label}"))
 
-    expected_raw = row.cells[sub_col] if sub_col is not None and sub_col < len(row.cells) else None
     raw = item.subcategory_raw
     if sub_col is None:
-        if raw is not None:
-            issues.append(_issue(item, RULE_SUBCATEGORY_RAW_MISMATCH, f"原表沒有子類別欄，子類別原文用語應為 null，實際「{raw}」", "子類別原文用語"))
-    elif normalize(raw or "") != normalize(expected_raw or ""):
+        # SPEC 17.14：沒有子類別欄時，子類別原文用語可為 null，或須是來源列「類型」欄格子的子字串（正規化後）
+        type_cells = [c for c in (_cell(row, i) for i in (type_cols or [])) if c]
+        if raw is not None and not (normalize(raw) and any(normalize(raw) in normalize(c) for c in type_cells)):
+            shown = "、".join(f"「{c}」" for c in type_cells) or "（無類型欄）"
+            issues.append(
+                _issue(
+                    item,
+                    RULE_SUBCATEGORY_RAW_MISMATCH,
+                    f"原表沒有子類別欄，子類別原文用語「{raw}」不是來源列類型欄 {shown} 的一部分",
+                    "子類別原文用語",
+                )
+            )
+    elif normalize(raw or "") != normalize((expected_raw := _cell(row, sub_col)) or ""):
         issues.append(_issue(item, RULE_SUBCATEGORY_RAW_MISMATCH, f"子類別原文用語「{raw}」與來源列子類別欄「{expected_raw}」不符", "子類別原文用語"))
 
     target = synonym_of(raw)
@@ -96,6 +113,7 @@ def run_p1check(ctx: ReportContext) -> None:
     rows = {(r.pdf_page, r.row_on_page): r for t in tables.tables for r in t.rows}
     sub_cols = [m.column - 1 for m in items_file.column_mapping if m.mapped_field == FIELD_SUBCATEGORY]
     sub_col = sub_cols[0] if sub_cols else None
+    type_cols = [m.column - 1 for m in items_file.column_mapping if m.mapped_field == FIELD_TYPE]
 
     nulls, issues, citations = [], [], []
     for item in items_file.items:
@@ -113,6 +131,6 @@ def run_p1check(ctx: ReportContext) -> None:
                 issues.append(_issue(item, rule, f"原文內容.{label} 引文{m.level}（比例 {m.ratio:.2f}）", f"原文內容.{label}"))
         row = rows.get((item.source_row.pdf_page, item.source_row.row_on_page))
         page_rows = [r for (p, _), r in rows.items() if p == item.source_row.pdf_page]
-        issues += check_rules(item, row, page_rows, sub_col)
+        issues += check_rules(item, row, page_rows, sub_col, type_cols)
 
     write_model(ctx.report_dir / "04_p1_check.json", P1Check(report_id=ctx.report_id, items=nulls, issues=issues, citations=citations))

@@ -311,3 +311,58 @@ def test_input_mode_option_overrides_settings(m3_project, make_runner):
     assert rec.settings["extract"]["input_mode"] == "text+pdf"
     req = [c for c in llm.calls if c.prompt_name == "s3a_table"][0]
     assert any(type(p).__name__ == "DocumentPart" for p in req.parts)
+
+
+# ---------------------------------------------------------------- S4：類型與子類別合併在同一欄（SPEC 17.14）
+
+from esgfin.check.p1check import check_rules  # noqa: E402
+from esgfin.schemas.p1 import P1Item  # noqa: E402
+
+HS_ROWS = [
+    TableRow(pdf_page=106, row_on_page=1, cells=["風險 - 政策和法規", "溫室氣體排放管制與碳費徵收"]),
+    TableRow(pdf_page=106, row_on_page=2, cells=["風險 - 技術", "開發低碳產品與服務"]),
+]
+
+
+def _p1(raw, sub="政策與法規", source="原文", row=1, event="溫室氣體排放管制與碳費徵收") -> P1Item:
+    d = p1_item_dict(event, "轉型風險", sub)
+    d.update({"子類別來源": source, "子類別原文用語": raw, "代碼": f"1234-2025-M1-00{row}", "方法": "方法一",
+              "來源列": {"pdf_page": 106, "row_on_page": row}, "頁碼": [106]})
+    d["原文內容"] = {"事件描述": event, "顯示財務Impact": None, "因應措施備註": None}
+    return P1Item.model_validate(d)
+
+
+def _raw_issues(item, row, sub_col, type_cols):
+    return [i for i in check_rules(item, row, HS_ROWS, sub_col, type_cols) if i.rule == "子類別原文用語與對應列不符"]
+
+
+def test_raw_subcategory_with_subcategory_column_unchanged():
+    rows = [TableRow(pdf_page=106, row_on_page=1, cells=["轉型風險", "政策和法規", "溫室氣體排放管制與碳費徵收"])]
+    assert check_rules(_p1("政策和法規"), rows[0], rows, 1, [0]) == []
+    bad = check_rules(_p1("轉型風險", sub="政策與法規", source="AI歸類"), rows[0], rows, 1, [0])
+    assert [(i.rule, i.severity) for i in bad] == [("子類別原文用語與對應列不符", "嚴重")]
+
+
+def test_raw_subcategory_without_subcategory_column_substring_of_type_cell_passes():
+    assert check_rules(_p1("政策和法規"), HS_ROWS[0], HS_ROWS, None, [0]) == []
+    assert check_rules(_p1("政策 和法規"), HS_ROWS[0], HS_ROWS, None, [0]) == []  # 正規化後子字串
+    assert check_rules(_p1(None, source="AI歸類"), HS_ROWS[0], HS_ROWS, None, [0]) == []  # null 仍可
+
+
+def test_raw_subcategory_without_subcategory_column_not_substring_is_severe():
+    issues = _raw_issues(_p1("政策與法令"), HS_ROWS[0], None, [0])
+    assert [i.severity for i in issues] == ["嚴重"]
+    assert "風險 - 政策和法規" in issues[0].message
+    # 沒有對應到「類型」的欄：非 null 一律嚴重
+    assert [i.severity for i in _raw_issues(_p1("政策和法規"), HS_ROWS[0], None, [])] == ["嚴重"]
+
+
+def test_raw_subcategory_matching_other_rows_type_cell_is_severe():
+    # 來源列是第 1 列（政策和法規），原文用語卻取自第 2 列的類型格
+    issues = _raw_issues(_p1("技術", sub="技術"), HS_ROWS[0], None, [0])
+    assert [i.severity for i in issues] == ["嚴重"]
+
+
+def test_synonym_conflict_still_applies_without_subcategory_column():
+    issues = check_rules(_p1("政策和法規", sub="市場"), HS_ROWS[0], HS_ROWS, None, [0])
+    assert [i.rule for i in issues] == ["子類別來源與同義詞表矛盾"]
